@@ -53,6 +53,8 @@ class PygameVisualizer:
                     commands.append("space")
                 elif event.key == pygame.K_h:
                     commands.append("home")
+                elif event.key == pygame.K_r:
+                    commands.append("auto")
                 elif event.key in (pygame.K_EQUALS, pygame.K_PLUS):
                     self._speed = min(8.0, self._speed * 1.25)
                 elif event.key in (pygame.K_MINUS, pygame.K_UNDERSCORE):
@@ -187,28 +189,22 @@ class PygameVisualizer:
         pygame.draw.rect(self.screen, (248, 248, 244), rect)
         pygame.draw.rect(self.screen, (45, 45, 42), rect, width=2)
         status = mission.get_status()
-        carry_pose = "-"
-        if hasattr(self.world, "carry_pose_is_raised"):
-            try:
-                carry_pose = "raised" if self.world.carry_pose_is_raised() else "low"
-            except Exception:
-                carry_pose = "-"
+        mode = "MANUAL" if status.get("manual") else "AUTO"
         lines = [
-            f"state: {status['state']}",
-            f"reason: {status['state_reason']}  age: {status['state_age_s']:.2f}s",
-            f"ir: {status['ir']}  sonic: {status['distance_cm']:.1f} cm",
-            f"pose: {status['x_m']:.2f}, {status['y_m']:.2f}, {status['heading_deg']:.0f} deg",
-            f"home: {status['home_m']:.2f} m  carrying: {status['carrying']}  arm: {carry_pose}",
-            f"balls seen: {status['balls']}  obstacles: {status['obstacles']}",
-            f"route nodes: {status['route_nodes']}  watchdog: {status['watchdog_resets']}",
-            f"sim ticks: {self.world.tick_count}  speed: {self._speed:.2f}x",
+            f"{mode} - {status['state']}",
+            f"ir {status['ir']}    sonic {status['distance_cm']:5.1f} cm",
+            f"home {status['home_m']:.2f} m    carrying {status['carrying']}",
+            f"sim {self.world.tick_count} ticks  -  speed {self._speed:.2f}x",
         ]
-        y = rect.top + 14
+        y = rect.top + 16
         for line in lines:
             text = self.font.render(line, True, (32, 32, 30))
             self.screen.blit(text, (rect.left + 14, y))
-            y += 26
-        hint = self.small_font.render("WASD move  Space clamp  H home  +/- speed  Q quit", True, (80, 80, 76))
+            y += 28
+        hint = self.small_font.render(
+            "WASD drive (latches manual)   Space pickup   R resume auto   H home   +/- speed   Q quit",
+            True, (80, 80, 76),
+        )
         self.screen.blit(hint, (rect.left + 14, rect.bottom - 28))
 
 
