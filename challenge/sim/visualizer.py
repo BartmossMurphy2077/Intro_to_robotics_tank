@@ -49,6 +49,8 @@ class PygameVisualizer:
                     commands.append("s")
                 elif event.key == pygame.K_d:
                     commands.append("d")
+                elif event.key == pygame.K_e:
+                    commands.append("stop")
                 elif event.key == pygame.K_SPACE:
                     commands.append("space")
                 elif event.key == pygame.K_h:
@@ -202,7 +204,7 @@ class PygameVisualizer:
             self.screen.blit(text, (rect.left + 14, y))
             y += 28
         hint = self.small_font.render(
-            "WASD drive (latches manual)   Space pickup   R resume auto   H home   +/- speed   Q quit",
+            "WASD drive   E stop   Space pickup   R resume auto   H home   +/- speed   Q quit",
             True, (80, 80, 76),
         )
         self.screen.blit(hint, (rect.left + 14, rect.bottom - 28))

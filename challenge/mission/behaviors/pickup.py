@@ -50,6 +50,7 @@ class BallPickup(Behavior):
 
     def drop(self, ctx: MissionContext) -> None:
         ctx.stop_drive()
+        self._prepare_for_drop(ctx)
         self._run_clamp_cycle(ctx, _CLAMP_DROP, self.config.drop_timeout_s)
         ctx.set_carrying_ball(False)
         ctx.enter_state(MissionState.FOLLOW_LINE, "ball_dropped")
@@ -80,6 +81,17 @@ class BallPickup(Behavior):
             ctx.sleep(max(0.0, self.config.carry_pose_settle_s))
         except Exception:
             # Carry pose is a visibility improvement, not mission-critical.
+            pass
+
+    def _prepare_for_drop(self, ctx: MissionContext) -> None:
+        """Align servo start pose with vendor `mode_clamp_down` assumptions."""
+        servo = getattr(ctx.car, "servo", None)
+        if servo is None:
+            return
+        try:
+            servo.setServoAngle("0", self.config.drop_prep_servo0_angle)
+            ctx.sleep(0.05)
+        except Exception:
             pass
 
 

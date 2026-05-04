@@ -119,6 +119,8 @@ class RuntimeConsole:
         lowered = char.lower()
         if not self._buffer and lowered in _MOVEMENT_KEYS:
             return lowered
+        if not self._buffer and lowered == "e":
+            return "stop"
         if not self._buffer and char == " ":
             return "space"
 
@@ -169,9 +171,13 @@ def coalesce_movement_commands(commands: list[str]) -> list[str]:
 def format_hud_line(status: dict) -> str:
     """Single concise HUD line. Easy to scan, no extra chrome."""
     mode = "manual" if status.get("manual") else "auto"
+    ir_raw = status.get("ir_raw", status.get("ir"))
+    ir_inv = status.get("ir_inverted", 0)
+    line_seen = status.get("line_seen", 0)
     return (
         f"[{mode}] state={status['state']:<14} "
-        f"ir={status['ir']} dist={status['distance_cm']:5.1f}cm "
+        f"ir={status['ir']} raw={ir_raw} inv={ir_inv} line={line_seen} "
+        f"dist={status['distance_cm']:5.1f}cm "
         f"carry={status['carrying']} home={status['home_m']:.2f}m"
     )
 
