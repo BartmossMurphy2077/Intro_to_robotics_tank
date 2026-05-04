@@ -392,6 +392,7 @@ class CompetitionRobot:
         self._left_duty      = 0
         self._right_duty     = 0
         self._ball_last_seen = 0.0   # timestamp of last positive ball detection
+        self._last_ir_cmd    = LINE_FORWARD  # last non-zero IR command (used when line briefly lost)
 
         # Graceful shutdown on Ctrl-C or SIGTERM
         signal.signal(signal.SIGINT,  self._signal_handler)
@@ -560,7 +561,7 @@ class CompetitionRobot:
           bit 0 = IR03 (GPIO21) = RIGHT  sensor
 
         Decision table:
-          0 (000) none     → creep forward (search)
+          0 (000) none     → continue last known steering (handles corners and gaps)
           1 (001) right    → hard right turn
           2 (010) centre   → straight forward
           3 (011) c+r      → gentle right
@@ -571,10 +572,19 @@ class CompetitionRobot:
                              NOTE: original car.py stops at 7; we continue
                              through intersections as the competition course
                              may have branches.
+
+        When IR=0 (line lost) the robot keeps the last known steering command
+        so that it continues rounding a corner rather than driving straight off
+        the track.
         """
         ir = self.infrared.read_all_infrared()
+
+        if ir == 0:
+            # Line temporarily lost (corner overshoot, gap in tape) —
+            # continue whatever we were doing so we don't undershoot a turn.
+            return self._last_ir_cmd
+
         mapping = {
-            0: LINE_SEARCH,      # no line — creep/search
             1: LINE_HARD_RIGHT,  # right only
             2: LINE_FORWARD,     # centre only
             3: LINE_SOFT_RIGHT,  # centre + right
@@ -583,7 +593,9 @@ class CompetitionRobot:
             6: LINE_SOFT_LEFT,   # left + centre
             7: LINE_FORWARD,     # all sensors   (wide junction)
         }
-        return mapping.get(ir, LINE_SEARCH)
+        cmd = mapping.get(ir, LINE_FORWARD)
+        self._last_ir_cmd = cmd   # remember for the IR=0 case above
+        return cmd
 
     # ─────────────────────────────────────────────────────────────────────────
     # Obstacle avoidance  (blocking, always turns LEFT)
@@ -594,15 +606,17 @@ class CompetitionRobot:
         Drive around the obstacle on the left side using a fixed timed
         sequence, then re-acquire the line.
 
-        Manoeuvre steps (all at ±1500 duty):
-          1. Reverse briefly           (avoid bumping obstacle)
-          2. Turn left  90°            (face left of obstacle)
-          3. Drive forward             (clear the obstacle's side)
-          4. Turn right 90°            (now parallel to original heading)
-          5. Drive forward             (clear the obstacle's front)
-          6. Turn right 90°            (now facing original heading)
-          7. Creep forward             (until IR detects line, max 3 s)
-          8. Small left correction     (straighten up on line)
+        Manoeuvre geometry (robot starts facing North, obstacle ahead):
+
+          Start  → face North  at (0, 0)
+          Step 2 → face West               (turn left  90°)
+          Step 3 → move to  (-side, 0)     (clear obstacle width)
+          Step 4 → face North again        (turn right 90°)
+          Step 5 → move to  (-side, front) (clear obstacle length)
+          Step 6 → face East               (turn right 90°)
+          Step 7 → move to  (0, front)     (drive back to line column)
+          Step 8 → face North again        (turn left  90°)
+          Step 9 → creep forward until IR re-detects line
 
         All timings are controlled by TURN_90_S and BYPASS_FORWARD_S.
         Calibrate TURN_90_S first for accurate 90° turns.
@@ -611,26 +625,32 @@ class CompetitionRobot:
         self._stop()
         time.sleep(0.15)
 
-        # 1. Reverse
+        # 1. Reverse slightly so we don't clip the obstacle
         self._drive_timed(-1500, -1500, 0.30)
 
-        # 2. Left 90°
+        # 2. Turn LEFT 90°  →  now facing left / West
         self._turn_timed(-1500, 1500, TURN_90_S)
 
-        # 3. Clear obstacle side
+        # 3. Drive forward to clear the obstacle's side  →  (-side, 0)
         self._drive_timed(1500, 1500, BYPASS_FORWARD_S)
 
-        # 4. Right 90° (parallel to original heading)
+        # 4. Turn RIGHT 90°  →  now facing North (original heading) again
         self._turn_timed(1500, -1500, TURN_90_S)
 
-        # 5. Clear obstacle front
+        # 5. Drive forward to clear the obstacle's front  →  (-side, front)
         self._drive_timed(1500, 1500, BYPASS_FORWARD_S)
 
-        # 6. Right 90° (back to original heading)
+        # 6. Turn RIGHT 90°  →  now facing East (toward the line)
         self._turn_timed(1500, -1500, TURN_90_S)
 
-        # 7. Creep forward until IR hits the line
-        print("[Obstacle] Searching for line ...")
+        # 7. Drive East to return to the original line column  →  (0, front)
+        self._drive_timed(1500, 1500, BYPASS_FORWARD_S)
+
+        # 8. Turn LEFT 90°  →  now facing North (original heading) again
+        self._turn_timed(-1500, 1500, TURN_90_S)
+
+        # 9. Creep forward until IR detects the line (robot now aligned North)
+        print("[Obstacle] Creeping forward to re-acquire line ...")
         self._drive(1200, 1200)
         t0 = time.time()
         found = False
@@ -641,9 +661,7 @@ class CompetitionRobot:
             time.sleep(0.05)
         self._stop()
 
-        # 8. Small correction — nudge left to centre on line
         if found:
-            self._turn_timed(-1500, 1500, TURN_90_S * 0.12)
             print("[Obstacle] Line re-acquired")
         else:
             print("[Obstacle] WARNING — line not found after bypass")
