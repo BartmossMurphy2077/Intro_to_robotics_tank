@@ -111,6 +111,7 @@ ENABLE_VISION     = True   # Camera-based red-ball detection
 # ══════════════════════════════════════════════════════════════════════════════
 
 TURN_90_S        = 0.75    # seconds to rotate 90 ° at motor duty ±1500
+TURN_TIME_SCALE  = 0.40    # global multiplier applied to every turn duration
 FORWARD_MPS      = 0.30    # metres/second at motor duty 2000
 WHEEL_BASE_M     = 0.155   # metres between left and right track centres
 SPEED_SCALE      = FORWARD_MPS / 2000.0   # m/s per duty unit (auto-computed)
@@ -427,10 +428,14 @@ class CompetitionRobot:
         """
         Spin in-place for `duration` seconds.
         For a true in-place spin (left=-right), v=0 so only heading changes.
+
+        A single global multiplier (TURN_TIME_SCALE) is applied here so turn
+        behaviour can be tuned in one place instead of changing every caller.
         """
+        effective_duration = duration * TURN_TIME_SCALE
         self._drive(left, right)
         t0 = time.time()
-        while time.time() - t0 < duration:
+        while time.time() - t0 < effective_duration:
             self.tracker.update(left, right, LOOP_DT)
             time.sleep(LOOP_DT)
         self._stop()
@@ -1045,6 +1050,7 @@ EXAMPLES
 CALIBRATION CONSTANTS  (edit at top of file)
 ----------------------------------------------
   TURN_90_S    seconds for a 90-degree turn at duty ±1500
+    TURN_TIME_SCALE global multiplier applied to every turn duration
   FORWARD_MPS  metres/second at duty 2000
   WHEEL_BASE_M distance between tracks in metres
         """,
