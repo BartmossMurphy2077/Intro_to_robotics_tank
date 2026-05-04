@@ -112,17 +112,19 @@ ENABLE_VISION     = True   # Camera-based red-ball detection
 
 # ── Obstacle / timed-turn params ────────────────────────────────────────────
 TURN_90_S          = 0.95  # seconds to rotate 90 ° at full motor duty
-TURN_STRENGTH      = 0.55  # 0.0–1.0 — motor duty scale for obstacle bypass
+TURN_STRENGTH      = 0.80  # 0.0–1.0 — motor duty scale for obstacle bypass
                            # and return-home pivots.
+                           # 0.80 → ±1200 duty (≈29% PWM) — reliably engages both motors.
                            # Raise if robot under-shoots 90°; lower to reduce overshoot.
 
 # ── Line-follow params ───────────────────────────────────────────────────────
 LINE_FORWARD_STRENGTH = 0.70  # 0.0–1.0 — scales straight-ahead duty (1500 → ~1050)
                               # Lower = slower forward speed on straight sections.
-LINE_TURN_STRENGTH    = 0.45  # 0.0–1.0 — scales turn duty during IR steering
-                              # Lower = gentler corrections, less oscillation.
-MIN_TURN_DUTY      = 450   # minimum |duty| for any scaled turn motor;
-                           # prevents motors stalling in the PWM dead-band.
+LINE_TURN_STRENGTH    = 0.60  # 0.0–1.0 — scales turn duty during IR steering.
+                              # 0.60 keeps most values above MIN_TURN_DUTY so
+                              # both motors actually spin.
+MIN_TURN_DUTY      = 1000  # minimum |duty| for any scaled turn motor (≈24% PWM).
+                           # Below this threshold hobby DC motors stall under load.
 FORWARD_MPS        = 0.30  # metres/second at motor duty 2000
 WHEEL_BASE_M     = 0.155   # metres between left and right track centres
 SPEED_SCALE      = FORWARD_MPS / 2000.0   # m/s per duty unit (auto-computed)
