@@ -8,7 +8,7 @@ injected as a parameter; sim world is also optional (None on real hardware).
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from typing import Any
 
 from ..mission import ChallengeMission, MissionConfig
 from .commands import handle_command
@@ -25,8 +25,10 @@ def run_mission(
 ) -> None:
     console = RuntimeConsole()
     last_status = 0.0
+    running = False
 
     print(format_startup_banner(cfg))
+    console.print_info_line("[challenge] waiting for 'start' command")
 
     try:
         console.start()
@@ -38,23 +40,32 @@ def run_mission(
                     commands = list(commands) + list(gui)
             commands = coalesce_movement_commands(commands)
 
-            handled_any = False
             for command in commands:
+                cmd = (command or "").strip().lower()
+                if cmd == "start":
+                    if not running:
+                        running = True
+                        console.print_info_line("[challenge] started")
+                    else:
+                        console.print_info_line("[challenge] already started")
+                    continue
+                if cmd in ("stop", "pause"):
+                    if running:
+                        running = False
+                        mission.stop_drive()
+                        console.print_info_line("[challenge] paused; type 'start' to continue")
+                    else:
+                        console.print_info_line("[challenge] already paused")
+                    continue
                 if handle_command(
                     command, mission, cfg, emit_line=console.print_info_line
                 ):
-                    handled_any = True
+                    continue
 
-            # If a manual movement key was just pressed, the mission is now
-            # in latched manual mode; mission.step() short-circuits autonomy.
-            if not handled_any:
-                mission.step()
-            else:
-                # Still tick the mission so manual idle-stop and pose
-                # integration progress.
+            if running:
                 mission.step()
 
-            if sim_world is not None:
+            if running and sim_world is not None:
                 speed = getattr(visualizer, "speed", 1.0) if visualizer is not None else 1.0
                 sim_world.tick(cfg.loop_sleep_s * max(0.25, min(8.0, float(speed))))
 
@@ -83,8 +94,8 @@ def format_startup_banner(cfg: MissionConfig) -> str:
         f"[challenge] obstacle_cm={cfg.obstacle_distance_cm:.1f} "
         f"pickup_cm={cfg.pickup_distance_cm:.1f} home_radius_m={cfg.home_radius_m:.2f} "
         f"vision={cfg.use_vision}\n"
-        "[challenge] commands: WASD drive (latches manual)  space pickup  "
-        "auto resume  home/status/help + Enter"
+        "[challenge] commands: start  WASD drive (latches manual)  space pickup  "
+        "auto resume  stop/pause  home/status/help + Enter"
     )
 
 
