@@ -519,6 +519,14 @@ class ChallengeMission:
 
     def _is_obstacle(self, distance_cm: float) -> bool:
         if self._carrying_ball:
+            # Right after pickup the ultrasonic still sees the held ball at
+            # 5-10cm. Suppress obstacle detection during the grace window and
+            # ignore any reading closer than carry_min_obstacle_cm thereafter
+            # (anything that close while carrying is the payload, not a wall).
+            if self._pickup.is_carrying_grace_active(self._now()):
+                return False
+            if 0 < distance_cm < self.config.carry_min_obstacle_cm:
+                return False
             return 0 < distance_cm <= self.config.obstacle_distance_cm
         if self._is_pickup_distance(distance_cm):
             return False

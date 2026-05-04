@@ -34,6 +34,14 @@ class BallPickup(Behavior):
         self._pick_deadline: float = 0.0
         self._drop_stage: str | None = None
         self._drop_deadline: float = 0.0
+        # Timestamp of the last successful pick → "carry" transition. The
+        # controller uses this to suppress obstacle detection for a short grace
+        # window (the ultrasonic sensor sees the held ball as a near obstacle).
+        self.pick_completed_ts: float = -999.0
+
+    def is_carrying_grace_active(self, now: float) -> bool:
+        grace = max(0.0, float(self.config.carry_obstacle_grace_s))
+        return (now - self.pick_completed_ts) < grace
 
     def pick(self, ctx: MissionContext) -> None:
         """Legacy synchronous path — runs the FSM to completion.
@@ -139,6 +147,7 @@ class BallPickup(Behavior):
 
         if self._pick_stage == "complete":
             self._pick_stage = None
+            self.pick_completed_ts = ctx.now()
             return "done"
 
         return "progress"

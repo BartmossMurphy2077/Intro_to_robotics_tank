@@ -1,0 +1,86 @@
+"""Tests for the editable JSON config loader and the new line/carry knobs."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from challenge.mission import MissionConfig
+from challenge.mission.behaviors.line_follow import LineFollower, _clip_delta
+from challenge.mission.behaviors.pickup import BallPickup
+from challenge.mission.config_loader import apply_config_dict, load_config_file
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CONFIG = REPO_ROOT / "challenge" / "config" / "default.json"
+
+
+def test_default_config_loads_and_applies() -> None:
+    cfg = MissionConfig()
+    data = load_config_file(DEFAULT_CONFIG)
+    skipped = apply_config_dict(cfg, data)
+
+    # Comment keys must be stripped silently.
+    for key in skipped:
+        assert key.startswith("_") or key not in {f.name for f in cfg.__dataclass_fields__.values()}
+
+    # Editable file ships a softer line map than the vendor defaults.
+    assert cfg.line_command_map[6] == (-800, 1800)
+    assert cfg.line_command_map[3] == (1800, -800)
+    # New tunables are present.
+    assert cfg.line_max_wheel_delta == 1500
+    assert cfg.carry_obstacle_grace_s == 1.5
+    assert cfg.carry_min_obstacle_cm == 12.0
+
+
+def test_apply_config_dict_ignores_unknown_keys() -> None:
+    cfg = MissionConfig()
+    skipped = apply_config_dict(cfg, {"obstacle_distance_cm": 9.5, "not_a_real_field": 42})
+    assert cfg.obstacle_distance_cm == 9.5
+    assert "not_a_real_field" in skipped
+
+
+def test_clip_delta_caps_swings() -> None:
+    # +cap when target far above prev
+    assert _clip_delta(0, 4000, 1500) == 1500
+    # -cap when target far below prev
+    assert _clip_delta(1500, -4000, 1500) == 0
+    # passthrough when within cap
+    assert _clip_delta(500, 800, 1500) == 800
+
+
+def test_line_follower_rate_limit_seeds_from_zero() -> None:
+    # First tick from a stopped chassis cannot exceed the cap on either wheel.
+    cfg = MissionConfig(line_max_wheel_delta=1500)
+    cfg.line_command_map = {6: (-2000, 4000)}  # vendor-style hard left
+    follower = LineFollower(cfg, line_memory=[], line_graph=_DummyGraph())
+
+    target = cfg.line_command_map[6]
+    left, right = follower._apply_steer_limit(*target)
+    assert left == -1500
+    assert right == 1500
+    # Once it has been one tick at (-1500, 1500), the next tick can step a
+    # further 1500 toward the target.
+    follower._prev_left, follower._prev_right = left, right
+    left2, right2 = follower._apply_steer_limit(*target)
+    assert left2 == -2000  # already at target
+    assert right2 == 3000
+
+
+def test_pickup_grace_window_blocks_obstacle_check() -> None:
+    cfg = MissionConfig(carry_obstacle_grace_s=1.0)
+    pickup = BallPickup(cfg)
+    pickup.pick_completed_ts = 100.0
+    assert pickup.is_carrying_grace_active(100.5) is True
+    assert pickup.is_carrying_grace_active(101.5) is False
+
+
+class _DummyGraph:
+    def add_line_point(self, *_args, **_kwargs) -> None:
+        pass
+
+    def add_obstacle(self, *_args, **_kwargs) -> None:
+        pass
+
+    def mark_home(self, *_args, **_kwargs) -> None:
+        pass

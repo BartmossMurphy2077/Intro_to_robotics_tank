@@ -45,6 +45,14 @@ class MissionConfig:
     line_command_map: Dict[int, Tuple[int, int]] = field(
         default_factory=lambda: dict(_VENDOR_LINE_MAP)
     )
+    # Per-tick wheel-duty change cap. Vendor map can swing 8000 units between
+    # adjacent codes, which rotates the chassis perpendicular in one tick.
+    # Clamping the delta gives the line follower a poor-man's slew limiter.
+    line_max_wheel_delta: int = 1500
+    # When the spiral search budget expires we fall back to a slow rotate-in-
+    # place toward the last-seen line direction for at most this long, before
+    # giving up and crawling forward.
+    line_perpendicular_recovery_s: float = 0.6
 
     # Obstacle avoidance motion profile.
     avoid_backup_speed: int = -1200
@@ -77,6 +85,12 @@ class MissionConfig:
     jaw_closed_angle: int = 140    # servo1: jaws fully closed (carry/grip)
     arm_ramp_step_deg: int = 1
     arm_ramp_step_s: float = 0.012
+    # After a successful pickup the ultrasonic sensor still has line-of-sight
+    # to the held ball at ~5-10 cm. Suppress obstacle detection for this many
+    # seconds after the pickup FSM finishes, and treat any reading closer than
+    # `carry_min_obstacle_cm` as the held ball (not an obstacle).
+    carry_obstacle_grace_s: float = 1.5
+    carry_min_obstacle_cm: float = 12.0
 
     # Dead-reckoning return-to-start.
     duty_to_mps: float = 0.00022

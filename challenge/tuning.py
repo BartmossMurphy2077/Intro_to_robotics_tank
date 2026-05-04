@@ -50,6 +50,10 @@ PARAM_SPECS: tuple[ParamSpec, ...] = (
     ParamSpec("avoid_cooldown_s", 0.2, 3.0),
     ParamSpec("line_recovery_cooldown_s", 0.2, 3.0),
     ParamSpec("spiral_search_budget_s", 1.0, 7.0),
+    ParamSpec("line_max_wheel_delta", 600.0, 2400.0, "int"),
+    ParamSpec("line_perpendicular_recovery_s", 0.2, 1.5),
+    ParamSpec("carry_obstacle_grace_s", 0.5, 3.0),
+    ParamSpec("carry_min_obstacle_cm", 6.0, 18.0),
 )
 
 

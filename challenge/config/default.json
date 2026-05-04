@@ -1,0 +1,92 @@
+{
+  "_comment": "Operator-editable mission defaults. Loaded by main.py via --config (default path: this file). Override individual fields freely; unknown fields are ignored. To use the GA-tuned weights from outputs/ga/best_params.json instead, pass --use-ga (or --params PATH).",
+
+  "loop_sleep_s": 0.05,
+
+  "obstacle_distance_cm": 18.0,
+  "pickup_distance_cm": 15.0,
+  "home_radius_m": 0.22,
+
+  "line_code_zero_is_center": false,
+  "line_crawl_speed": 260,
+  "_comment_line_command_map": "IR code -> [left_duty, right_duty]. Vendor map used +/-4000 for hard turns; that overcorrects on the real chassis (one-tick 60-90deg rotation), so we cap at +/-1800 and zero the inner wheel for the gentle codes. Tweak here without touching code.",
+  "line_command_map": {
+    "0": [1200, 1200],
+    "1": [1500, 0],
+    "2": [1200, 1200],
+    "3": [1800, -800],
+    "4": [0, 1500],
+    "6": [-800, 1800]
+  },
+
+  "_comment_line_steer_limit": "Max change in either wheel duty per tick. Smooths bang-bang transitions so a single noisy IR flip cannot slam the chassis perpendicular to the line.",
+  "line_max_wheel_delta": 1500,
+  "line_perpendicular_recovery_s": 0.6,
+
+  "avoid_backup_speed": -1200,
+  "avoid_backup_s": 0.30,
+  "avoid_turn_left_speed": -1000,
+  "avoid_turn_right_speed": 1000,
+  "avoid_turn_s": 0.34,
+  "avoid_bypass_speed": 900,
+  "avoid_bypass_s": 0.42,
+  "avoid_return_turn_s": 0.28,
+  "avoid_settle_s": 0.12,
+
+  "pre_open_before_pick": true,
+  "pick_timeout_s": 6.0,
+  "drop_timeout_s": 4.0,
+  "raise_arm_after_pick": true,
+  "carry_servo0_angle": 150,
+  "carry_servo1_angle": 140,
+  "carry_pose_settle_s": 0.15,
+  "drop_prep_servo0_angle": 130,
+  "arm_min_angle": 90,
+  "arm_max_angle": 150,
+  "jaw_open_angle": 90,
+  "jaw_closed_angle": 140,
+  "arm_ramp_step_deg": 1,
+  "arm_ramp_step_s": 0.012,
+
+  "_comment_carry_obstacle": "After a successful pickup the ultrasonic still sees the held ball at ~5-10cm. Suppress obstacle detection for `carry_obstacle_grace_s` after pickup completes, and treat anything closer than `carry_min_obstacle_cm` as the ball itself (not an obstacle).",
+  "carry_obstacle_grace_s": 1.5,
+  "carry_min_obstacle_cm": 12.0,
+
+  "duty_to_mps": 0.00022,
+  "wheel_base_m": 0.16,
+  "heading_tolerance_rad": 0.28,
+  "return_home_speed": 950,
+  "return_home_slow_speed": 700,
+  "return_home_slow_radius_m": 0.55,
+  "return_home_use_graph": false,
+
+  "use_vision": false,
+  "vision_every_n_ticks": 3,
+  "seek_lock_frames": 3,
+  "seek_lost_frames": 8,
+  "seek_approach_radius_px": 30,
+  "seek_forward_duty": 900,
+  "seek_steer_kp": 1.0,
+  "seek_steer_kd": 0.0025,
+  "seek_commit_center_px": 110,
+  "seek_commit_min_radius_px": 8,
+  "seek_commit_max_distance_cm": 85.0,
+  "seek_distance_agree_ratio": 0.65,
+  "seek_max_s": 5.0,
+  "seek_failed_cooldown_s": 2.0,
+  "avoid_cooldown_s": 1.0,
+  "line_recovery_cooldown_s": 1.0,
+
+  "sonic_median_window": 3,
+  "ir_majority_window": 3,
+  "state_timeout_s": 8.0,
+  "spiral_search_budget_s": 4.0,
+
+  "ir_invert_bits": false,
+  "ir_auto_invert_bits": true,
+  "ir_debug_log": false,
+
+  "manual_dwell_s": 0.45,
+  "manual_speed_forward": 900,
+  "manual_speed_turn": 1100
+}

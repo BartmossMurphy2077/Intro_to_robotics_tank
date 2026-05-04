@@ -45,14 +45,31 @@ def parse_args() -> argparse.Namespace:
                    help="seed sim RNG for reproducible runs")
     p.add_argument("--use-vision", action="store_true",
                    help="enable red-ball vision pipeline (mission)")
+    p.add_argument(
+        "--config", default=str(repo_root / "challenge" / "config" / "default.json"),
+        help=(
+            "operator-editable mission config JSON (default: "
+            "challenge/config/default.json). Pass an empty string to skip "
+            "and use the dataclass defaults only."
+        ),
+    )
+    p.add_argument(
+        "--use-ga", action="store_true",
+        help=(
+            "load GA-tuned weights from outputs/ga/best_params.json "
+            "(equivalent to --params outputs/ga/best_params.json)"
+        ),
+    )
     p.add_argument("--params", default=None,
-                   help="load mission tuning params JSON (e.g. outputs/ga/best_params.json)")
-    p.add_argument("--obstacle-cm", type=float, default=18.0)
-    p.add_argument("--pickup-cm", type=float, default=8.0)
-    p.add_argument("--home-radius-m", type=float, default=0.22)
+                   help="load mission tuning params JSON (overrides --use-ga)")
+    # Argv overrides default to None so the editable config file wins by
+    # default; pass them explicitly only when you want to override the file.
+    p.add_argument("--obstacle-cm", type=float, default=None)
+    p.add_argument("--pickup-cm", type=float, default=None)
+    p.add_argument("--home-radius-m", type=float, default=None)
     p.add_argument("--status-interval", type=float, default=1.0)
-    p.add_argument("--loop-sleep", type=float, default=0.05)
-    p.add_argument("--line-crawl-speed", type=int, default=260)
+    p.add_argument("--loop-sleep", type=float, default=None)
+    p.add_argument("--line-crawl-speed", type=int, default=None)
     p.add_argument("--ir-zero-lost", action="store_true")
     p.add_argument(
         "--invert-ir",
@@ -85,6 +102,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def _resolve_trained_params_path(args: argparse.Namespace) -> Path | None:
+    """Resolve the GA tuning JSON path — opt-in only.
+
+    Order: explicit --params > CHALLENGE_PARAMS env > --use-ga shortcut.
+    Returns None if none are set (falling back to the editable config file).
+    """
     if getattr(args, "params", None):
         p = Path(args.params)
         return p if p.is_file() else None
@@ -93,19 +115,47 @@ def _resolve_trained_params_path(args: argparse.Namespace) -> Path | None:
         p = Path(env)
         if p.is_file():
             return p
-    for rel in ("outputs/ga/best_params.json", "best_params.json"):
-        p = repo_root / rel
-        if p.is_file():
-            return p
+    if getattr(args, "use_ga", False):
+        for rel in ("outputs/ga/best_params.json", "best_params.json"):
+            p = repo_root / rel
+            if p.is_file():
+                return p
     return None
 
 
 def apply_args(cfg: MissionConfig, args: argparse.Namespace) -> None:
-    cfg.obstacle_distance_cm = args.obstacle_cm
-    cfg.pickup_distance_cm = args.pickup_cm
-    cfg.home_radius_m = max(0.05, args.home_radius_m)
-    cfg.loop_sleep_s = max(0.01, args.loop_sleep)
-    cfg.line_crawl_speed = max(120, args.line_crawl_speed)
+    # 1) Editable JSON config (operator defaults). Skip if --config "" or file
+    #    missing — the dataclass defaults remain in force.
+    config_path_str = (args.config or "").strip()
+    if config_path_str:
+        config_path = Path(config_path_str)
+        if config_path.is_file():
+            from challenge.mission.config_loader import (
+                apply_config_dict,
+                load_config_file,
+            )
+
+            data = load_config_file(config_path)
+            skipped = apply_config_dict(cfg, data)
+            print(f"[challenge] loaded config from {config_path.resolve()}")
+            if skipped:
+                noisy = [k for k in skipped if not k.startswith("_")]
+                if noisy:
+                    print(f"[challenge] config: ignored unknown keys: {noisy}")
+        else:
+            print(f"[challenge] config file not found: {config_path} (using defaults)")
+
+    # 2) Argv overrides — only applied when the operator passed them.
+    if args.obstacle_cm is not None:
+        cfg.obstacle_distance_cm = args.obstacle_cm
+    if args.pickup_cm is not None:
+        cfg.pickup_distance_cm = args.pickup_cm
+    if args.home_radius_m is not None:
+        cfg.home_radius_m = max(0.05, args.home_radius_m)
+    if args.loop_sleep is not None:
+        cfg.loop_sleep_s = max(0.01, args.loop_sleep)
+    if args.line_crawl_speed is not None:
+        cfg.line_crawl_speed = max(120, args.line_crawl_speed)
     if args.ir_zero_lost:
         cfg.line_code_zero_is_center = False
     # Keep camera scanning always enabled in mission runtime.
@@ -114,6 +164,8 @@ def apply_args(cfg: MissionConfig, args: argparse.Namespace) -> None:
     if args.invert_ir:
         cfg.ir_invert_bits = True
         cfg.ir_auto_invert_bits = False
+
+    # 3) GA-tuned weights — opt-in via --params, --use-ga, or CHALLENGE_PARAMS.
     trained = _resolve_trained_params_path(args)
     if trained is not None:
         from challenge.tuning import apply_params, load_params
