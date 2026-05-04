@@ -148,7 +148,7 @@ MIN_BALL_AREA_PX = 800      # minimum contour area (px²) to count as ball
 BALL_HYSTERESIS  = 3        # consecutive frames with ball before "confirmed"
 
 # Main loop
-LOOP_HZ = 60
+LOOP_HZ = 80
 LOOP_DT = 1.0 / LOOP_HZ    # ~33 ms per tick; max dt cap prevents tracker jump
 
 # ── Servo angle positions ─────────────────────────────────────────────────────
