@@ -1,6 +1,7 @@
 import math
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Dict, Tuple
 from enum import Enum
 from statistics import median
 from typing import Callable
@@ -18,6 +19,18 @@ class MissionConfig:
     # Line-follow and fallback behavior.
     line_code_zero_is_center: bool = True
     line_crawl_speed: int = 260
+    # Motor outputs used for specific infrared codes (left, right).
+    # This can be tuned at runtime to adjust turning aggressiveness.
+    line_command_map: Dict[int, Tuple[int, int]] = field(
+        default_factory=lambda: {
+            2: (1200, 1200),
+            4: (-1500, 2500),
+            6: (-2000, 4000),
+            1: (2500, -1500),
+            3: (4000, -2000),
+            0: (1200, 1200),
+        }
+    )
 
     # Avoidance motion profile.
     avoid_backup_speed: int = -1200
@@ -830,19 +843,17 @@ class ChallengeMission:
         return max(counts.items(), key=lambda item: (item[1], item[0] == code))[0]
 
     def _infer_line_command(self, infrared_code: int) -> tuple[int, int]:
-        if infrared_code == 2:
-            return 1200, 1200
-        if infrared_code == 4:
-            return -1500, 2500
-        if infrared_code == 6:
-            return -2000, 4000
-        if infrared_code == 1:
-            return 2500, -1500
-        if infrared_code == 3:
-            return 4000, -2000
-        if infrared_code == 0 and self.config.line_code_zero_is_center:
-            return 1200, 1200
-        return self.config.line_crawl_speed, self.config.line_crawl_speed
+        # Prefer configured mapping so parameters can be changed at runtime.
+        try:
+            if infrared_code == 0 and not self.config.line_code_zero_is_center:
+                # when 0 is not center we treat as lost
+                raise KeyError
+            return self.config.line_command_map.get(
+                infrared_code, (self.config.line_crawl_speed, self.config.line_crawl_speed)
+            )
+        except Exception:
+            # Fallback to safe crawl
+            return self.config.line_crawl_speed, self.config.line_crawl_speed
 
     def _integrate_pose(self) -> None:
         now = self._now()

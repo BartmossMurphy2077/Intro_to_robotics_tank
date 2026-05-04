@@ -237,7 +237,77 @@ def handle_command(
         return True
 
     if command in ("help", "?"):
-        emit_line("[challenge] commands: w a s d space home status help")
+        emit_line(
+            "[challenge] commands: w a s d space home status help\n"
+            "set <param> <value>  -- set numeric param (pickup-cm, obstacle-cm, line-crawl-speed)\n"
+            "get <param>          -- show a config param\n"
+            "setmap <code> <left> <right> -- set infrared code motor outputs"
+        )
+        return True
+
+    # Runtime tuning: set/get simple numeric parameters
+    if command.startswith("set "):
+        parts = command.split()
+        if len(parts) != 3:
+            emit_line("[challenge] set usage: set <param> <value>")
+            return True
+        _, param, val = parts
+        try:
+            f = float(val)
+        except ValueError:
+            emit_line("[challenge] set value must be numeric")
+            return True
+
+        if param == "pickup-cm":
+            cfg.pickup_distance_cm = float(f)
+        elif param == "obstacle-cm":
+            cfg.obstacle_distance_cm = float(f)
+        elif param == "line-crawl-speed":
+            cfg.line_crawl_speed = int(f)
+        else:
+            emit_line(f"[challenge] unknown param: {param}")
+            return True
+
+        emit_line(f"[challenge] set {param} = {f}")
+        return True
+
+    if command.startswith("get "):
+        parts = command.split()
+        if len(parts) != 2:
+            emit_line("[challenge] get usage: get <param>")
+            return True
+        _, param = parts
+        if param == "pickup-cm":
+            emit_line(f"pickup-cm = {cfg.pickup_distance_cm}")
+        elif param == "obstacle-cm":
+            emit_line(f"obstacle-cm = {cfg.obstacle_distance_cm}")
+        elif param == "line-crawl-speed":
+            emit_line(f"line-crawl-speed = {cfg.line_crawl_speed}")
+        else:
+            emit_line(f"[challenge] unknown param: {param}")
+        return True
+
+    # Set infrared code motor outputs (for tuning turning rate)
+    if command.startswith("setmap "):
+        parts = command.split()
+        if len(parts) != 4:
+            emit_line("[challenge] setmap usage: setmap <code> <left> <right>")
+            return True
+        _, code_s, left_s, right_s = parts
+        try:
+            code = int(code_s)
+            left = int(left_s)
+            right = int(right_s)
+        except ValueError:
+            emit_line("[challenge] setmap arguments must be integers")
+            return True
+
+        # Update in mission config mapping
+        try:
+            mission.config.line_command_map[code] = (left, right)
+            emit_line(f"[challenge] line map[{code}] = ({left}, {right})")
+        except Exception as e:
+            emit_line(f"[challenge] failed to set map: {e}")
         return True
 
     return False
