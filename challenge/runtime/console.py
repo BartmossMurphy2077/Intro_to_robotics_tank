@@ -117,10 +117,17 @@ class RuntimeConsole:
             return None
 
         lowered = char.lower()
+        # Single-character primary controls — emit immediately, no Enter.
         if not self._buffer and lowered in _MOVEMENT_KEYS:
             return lowered
         if not self._buffer and lowered == "e":
             return "stop"
+        if not self._buffer and lowered == "q":
+            return "start"
+        if not self._buffer and lowered == "i":
+            return "i"
+        if not self._buffer and lowered == "h":
+            return "h"
         if not self._buffer and char == " ":
             return "space"
 
@@ -168,17 +175,23 @@ def coalesce_movement_commands(commands: list[str]) -> list[str]:
     return out
 
 
-def format_hud_line(status: dict) -> str:
-    """Single concise HUD line. Easy to scan, no extra chrome."""
-    mode = "manual" if status.get("manual") else "auto"
-    ir_raw = status.get("ir_raw", status.get("ir"))
-    ir_inv = status.get("ir_inverted", 0)
-    line_seen = status.get("line_seen", 0)
+def format_hud_line(status: dict, operator_auto: bool = False) -> str:
+    """One-line HUD: mode, state, duty estimates, IR, pose, home distance."""
+    mode = "AUTO" if operator_auto else "MAN "
+    ir_used = int(status.get("ir", 7)) & 0b111
+    ir_raw = int(status.get("ir_raw", ir_used)) & 0b111
+    ir_inv = int(status.get("ir_inverted", 0))
+    line_seen = "yes" if status.get("line_seen", 0) else "NO "
+    tuned = status.get("tuned") or ""
+    tune_s = f" tune={tuned}" if tuned else ""
     return (
-        f"[{mode}] state={status['state']:<14} "
-        f"ir={status['ir']} raw={ir_raw} inv={ir_inv} line={line_seen} "
+        f"[{mode}] {status['state']:<14} "
+        f"L/R={status.get('duty_l', 0)}/{status.get('duty_r', 0)} "
+        f"ir={ir_used:03b} raw={ir_raw:03b} inv={ir_inv} line={line_seen} "
+        f"pose x={status['x_m']:.2f} y={status['y_m']:.2f} "
         f"dist={status['distance_cm']:5.1f}cm "
         f"carry={status['carrying']} home={status['home_m']:.2f}m"
+        f"{tune_s}"
     )
 
 

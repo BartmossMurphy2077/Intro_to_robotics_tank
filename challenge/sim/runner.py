@@ -96,7 +96,19 @@ def main() -> None:
         for _ in range(max(0, args.ticks)):
             if visualizer is not None:
                 for command in visualizer.poll_commands():
-                    handle_command(command, runner.mission, runner.config)
+                    cmd = (command or "").strip().lower()
+                    if cmd in ("q", "start"):
+                        runner.mission.toggle_operator_auto()
+                        continue
+                    if cmd in ("e", "stop", "pause"):
+                        runner.mission.stop_drive_latched()
+                        continue
+                    handle_command(
+                        command,
+                        runner.mission,
+                        runner.config,
+                        operator_auto=runner.mission.is_operator_auto(),
+                    )
                 if visualizer.should_quit():
                     break
             runner.tick()

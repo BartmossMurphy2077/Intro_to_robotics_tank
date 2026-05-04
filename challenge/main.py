@@ -13,6 +13,7 @@ All behavior logic lives in `challenge.mission.*` and `challenge.runtime.*`.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import threading
 import time
@@ -83,6 +84,22 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _resolve_trained_params_path(args: argparse.Namespace) -> Path | None:
+    if getattr(args, "params", None):
+        p = Path(args.params)
+        return p if p.is_file() else None
+    env = os.environ.get("CHALLENGE_PARAMS")
+    if env:
+        p = Path(env)
+        if p.is_file():
+            return p
+    for rel in ("outputs/ga/best_params.json", "best_params.json"):
+        p = repo_root / rel
+        if p.is_file():
+            return p
+    return None
+
+
 def apply_args(cfg: MissionConfig, args: argparse.Namespace) -> None:
     cfg.obstacle_distance_cm = args.obstacle_cm
     cfg.pickup_distance_cm = args.pickup_cm
@@ -97,10 +114,13 @@ def apply_args(cfg: MissionConfig, args: argparse.Namespace) -> None:
     if args.invert_ir:
         cfg.ir_invert_bits = True
         cfg.ir_auto_invert_bits = False
-    if getattr(args, "params", None):
+    trained = _resolve_trained_params_path(args)
+    if trained is not None:
         from challenge.tuning import apply_params, load_params
 
-        apply_params(cfg, load_params(args.params))
+        apply_params(cfg, load_params(trained))
+        cfg.trained_params_source = str(trained.resolve())
+        print(f"[challenge] loaded tuned params from {cfg.trained_params_source}")
 
 
 def _build_sim_world(args: argparse.Namespace):

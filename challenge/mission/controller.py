@@ -10,12 +10,24 @@ This file is intentionally thin. It only:
 All of the actual driving logic lives in the `behaviors/` modules, each of
 which can be developed and tested independently.
 
-Manual override semantics:
-    Tapping any WASD key latches the mission into MANUAL mode. While
-    latched, autonomous behaviors do *not* run — there is no auto-creep.
-    The wheels follow the last WASD command for `manual_dwell_s`, then
-    stop on idle. The user types `auto` (or `resume`) to re-enable
-    autonomous behaviors.
+Manual vs automatic (`_operator_auto`, toggled with Q in `run_mission`):
+
+    * **AUTO** — line follow, vision seek, ultrasonic pickup, return-home,
+      and obstacle avoidance all run (mission uses tuned `MissionConfig`
+      values when a JSON params file was loaded in `main.py`).
+
+    * **MANUAL** — only WASD driving (with dwell stop), space-initiated
+      pickup/drop, and while carrying a ball, return-home + avoidance still
+      run so the operator can complete the challenge without re-enabling
+      full AUTO.
+
+    WASD is rejected while AUTO is on (`handle_command` + pygame runner).
+
+Pickup / drop advance **one tick at a time** so the HUD and keyboard stay
+responsive during clamp motions.
+
+Manual wheel dwell (WASD) stops the motors after `manual_dwell_s` with no
+input. **E** forces operator MANUAL + idle wheels. **Q** toggles AUTO/MANUAL.
 """
 
 from __future__ import annotations
@@ -77,10 +89,15 @@ class ChallengeMission:
         self._seeker = VisionSeeker(config)
         self._return_home = ReturnHome(config)
 
-        # Manual override (latched).
+        # Manual wheel dwell (WASD) — only consulted when operator is in manual
+        # mode (`not _operator_auto`).
         self._manual_latched: bool = False
         self._manual_until_ts: float = 0.0
         self._last_manual_cmd: tuple[int, int] = (0, 0)
+        # Q toggles this in `run_mission`; default True so SimRunner / trainers
+        # run autonomy without an extra setup call. Interactive `run_mission`
+        # immediately calls `enter_manual_idle_at_start()` which clears this.
+        self._operator_auto: bool = True
 
         # Vision tick gate.
         self._tick_index = 0
@@ -99,6 +116,10 @@ class ChallengeMission:
         self._ir_invert_votes: int = 0
         self._ir_last_raw: int = 7
         self._ir_last_used: int = 7
+        self._ir_smoothed_code: int = 7
+        self._ir_debug_log: bool = bool(self.config.ir_debug_log)
+        self._ir_debug_last_logged: int = -1
+        self._ir_debug_emit: Callable[[str], None] = print
 
     # ---------- public API ----------
 
@@ -106,13 +127,37 @@ class ChallengeMission:
         self._integrate_pose()
         self._tick_index += 1
 
-        if self._manual_latched:
+        if not self._operator_auto:
+            distance = self._distance_cm()
+            if self.state == MissionState.AVOID_OBSTACLE:
+                self._avoidance.step(self)
+                return
+            if self.state == MissionState.PICK_BALL:
+                self._pickup.ensure_pick_started(self)
+                if self._pickup.step_pick(self) == "done":
+                    self._carrying_ball = True
+                    self.enter_state(MissionState.RETURN_HOME, "ball_picked")
+                return
+            if self.state == MissionState.DROP_BALL:
+                self._pickup.ensure_drop_started(self)
+                if self._pickup.step_drop(self) == "done":
+                    self._carrying_ball = False
+                    self.enter_state(MissionState.FOLLOW_LINE, "ball_dropped")
+                return
+            if self._carrying_ball and self.state == MissionState.RETURN_HOME:
+                if self._is_obstacle(distance):
+                    self._remember_obstacle(distance)
+                    self._avoidance.start(self, resume_state=MissionState.RETURN_HOME)
+                    self._avoidance.step(self)
+                    return
+                self._return_home.step(self)
+                return
+            self._read_ir()
             self._step_manual()
             return
 
         distance = self._distance_cm()
 
-        # Vision: pull a frame every N ticks.
         if (
             self.config.use_vision
             and self._tick_index % max(1, self.config.vision_every_n_ticks) == 0
@@ -126,10 +171,16 @@ class ChallengeMission:
             self._avoidance.step(self)
             return
         if self.state == MissionState.PICK_BALL:
-            self._pickup.pick(self)
+            self._pickup.ensure_pick_started(self)
+            if self._pickup.step_pick(self) == "done":
+                self._carrying_ball = True
+                self.enter_state(MissionState.RETURN_HOME, "ball_picked")
             return
         if self.state == MissionState.DROP_BALL:
-            self._pickup.drop(self)
+            self._pickup.ensure_drop_started(self)
+            if self._pickup.step_drop(self) == "done":
+                self._carrying_ball = False
+                self.enter_state(MissionState.FOLLOW_LINE, "ball_dropped")
             return
         if self.state == MissionState.SEEK_BALL:
             self._seeker.step(self, distance, self._seeker.last_detection)
@@ -142,10 +193,14 @@ class ChallengeMission:
             return
 
         if self.state == MissionState.RETURN_HOME:
+            if self._is_obstacle(distance):
+                self._remember_obstacle(distance)
+                self._avoidance.start(self, resume_state=MissionState.RETURN_HOME)
+                self._avoidance.step(self)
+                return
             self._return_home.step(self)
             return
 
-        # FOLLOW_LINE: vision takes precedence with confident lock.
         if self.config.use_vision and not self._carrying_ball:
             ir = self._read_ir()
             line_lost = self._line_follower.is_line_lost(ir)
@@ -192,7 +247,7 @@ class ChallengeMission:
             "heading_deg": math.degrees(self.pose.heading_rad),
             "home_m": self._distance_to_home(),
             "distance_cm": self._distance_cm(),
-            "ir": self._read_ir(),
+            "ir": self._ir_smoothed_code,
             "carrying": int(self._carrying_ball),
             "balls": len(self.ball_memory),
             "obstacles": len(self.obstacle_memory),
@@ -202,6 +257,10 @@ class ChallengeMission:
             "line_lost_ticks": self._line_follower.line_lost_ticks,
             "false_seek_exits": self._seeker.false_seek_exits,
             "manual": int(self._manual_latched),
+            "operator_auto": int(self._operator_auto),
+            "duty_l": self._cmd_left,
+            "duty_r": self._cmd_right,
+            "tuned": self.config.trained_params_source or "",
             "ir_inverted": int(self._ir_inverted_runtime),
             "ir_raw": self._ir_last_raw,
             "ir_used": self._ir_last_used,
@@ -211,27 +270,29 @@ class ChallengeMission:
     def start_manual_drive(self, key: str, duration_s: float | None = None) -> bool:
         """Latch manual mode and apply the corresponding wheel command.
 
-        While latched, autonomous behaviors are suspended. The wheels follow
-        the last WASD command for `manual_dwell_s`, then stop on idle. Type
-        `auto` or call `resume_autonomous()` to re-enable autonomous logic.
+        Each WASD press drives at the configured duty for `manual_dwell_s`
+        seconds. After dwell expires, wheels are stopped automatically
+        (no auto-creep). Press Q (or call `resume_autonomous()`) to leave
+        manual mode.
 
-        `duration_s` is accepted for backwards compatibility (callers may
-        still pass a timeout) but is otherwise ignored — manual is latched.
+        `duration_s` is accepted for backwards compatibility but is
+        otherwise ignored: manual mode is now latched and dwell-based.
         """
+        if self._operator_auto:
+            return False
         cfg = self.config
-        creep_left, creep_right = cfg.line_command_map.get(
-            2, (cfg.line_crawl_speed, cfg.line_crawl_speed)
-        )
+        forward = cfg.manual_speed_forward
         turn = cfg.manual_speed_turn
 
         if key == "w":
-            # Use the same pair as regular center-line creep.
-            left, right = int(creep_left), int(creep_right)
+            left, right = forward, forward
         elif key == "s":
-            left, right = int(-creep_left), int(-creep_right)
+            left, right = -forward, -forward
         elif key == "a":
+            # Rotate left in place: left tread reverses, right tread forward.
             left, right = -turn, turn
         elif key == "d":
+            # Rotate right in place: left tread forward, right tread reverses.
             left, right = turn, -turn
         else:
             return False
@@ -244,18 +305,70 @@ class ChallengeMission:
 
     def manual_pickup_toggle(self) -> None:
         if self._carrying_ball:
-            self._pickup.drop(self)
+            self.enter_state(MissionState.DROP_BALL, "manual_drop")
             return
-        self._pickup.pick(self)
+        self.enter_state(MissionState.PICK_BALL, "manual_pick")
+
+    def enter_manual_idle_at_start(self) -> None:
+        """Call once at runtime startup: wheels stopped, operator manual (Q=auto)."""
+        self._operator_auto = False
+        self._pickup.cancel(self.car)
+        self._manual_latched = True
+        self._manual_until_ts = self._now()
+        self._last_manual_cmd = (0, 0)
+        self.stop_drive()
+
+    def set_operator_auto(self, enabled: bool) -> None:
+        """Q toggles this: full mission vs manual-drive-only (WASD when disabled)."""
+        en = bool(enabled)
+        self._operator_auto = en
+        if not en:
+            self._pickup.cancel(self.car)
+            if self.state in (MissionState.PICK_BALL, MissionState.DROP_BALL):
+                self.enter_state(
+                    MissionState.RETURN_HOME if self._carrying_ball else MissionState.FOLLOW_LINE,
+                    "operator_manual",
+                )
+            self._manual_latched = True
+            self._manual_until_ts = self._now()
+            self._last_manual_cmd = (0, 0)
+            self.stop_drive()
+            return
+        self._manual_latched = False
+        self.stop_drive()
+        if self.state in (MissionState.PICK_BALL, MissionState.DROP_BALL):
+            self.enter_state(
+                MissionState.RETURN_HOME if self._carrying_ball else MissionState.FOLLOW_LINE,
+                "operator_auto_on",
+            )
+            return
+        next_state = MissionState.RETURN_HOME if self._carrying_ball else MissionState.FOLLOW_LINE
+        self.enter_state(next_state, "operator_auto_on")
+
+    def toggle_operator_auto(self) -> bool:
+        self.set_operator_auto(not self._operator_auto)
+        return self._operator_auto
+
+    def is_operator_auto(self) -> bool:
+        return self._operator_auto
+
+    def stop_drive_latched(self) -> None:
+        """E-stop style: drop to operator-manual with wheels idle."""
+        self.set_operator_auto(False)
 
     def resume_autonomous(self) -> None:
-        if self._manual_latched:
-            self._manual_latched = False
-            self.stop_drive()
-            self.enter_state(MissionState.FOLLOW_LINE, "manual_resume")
+        """Compatibility alias for runners that call `resume_autonomous`."""
+        self.set_operator_auto(True)
 
     def is_manual_mode(self) -> bool:
-        return self._manual_latched
+        return not self._operator_auto
+
+    def set_ir_debug(self, enabled: bool, emit: Callable[[str], None] | None = None) -> None:
+        self._ir_debug_log = bool(enabled)
+        if emit is not None:
+            self._ir_debug_emit = emit
+        # Force the next IR change to log even if it matches the previous.
+        self._ir_debug_last_logged = -1
 
     # ---------- MissionContext implementation (used by behaviors) ----------
 
@@ -431,6 +544,7 @@ class ChallengeMission:
         try:
             raw_code = int(self.car.infrared.read_all_infrared()) & 0b111
         except Exception:
+            self._ir_smoothed_code = 7
             return 7
 
         inverted_code = raw_code ^ 0b111
@@ -455,7 +569,17 @@ class ChallengeMission:
         counts: dict[int, int] = {}
         for item in self._ir_history:
             counts[item] = counts.get(item, 0) + 1
-        return max(counts.items(), key=lambda item: (item[1], item[0] == code))[0]
+        smoothed = max(counts.items(), key=lambda item: (item[1], item[0] == code))[0]
+        self._ir_smoothed_code = int(smoothed)
+
+        if self._ir_debug_log and smoothed != self._ir_debug_last_logged:
+            self._ir_debug_last_logged = smoothed
+            line_seen = "yes" if smoothed in (1, 2, 3, 4, 6) else "NO"
+            self._ir_debug_emit(
+                f"[ir] raw={raw_code:03b} used={smoothed:03b} "
+                f"inv={'1' if self._ir_inverted_runtime else '0'} line={line_seen}"
+            )
+        return smoothed
 
     def _remember_obstacle(self, distance_cm: float) -> None:
         distance_m = distance_cm / 100.0
