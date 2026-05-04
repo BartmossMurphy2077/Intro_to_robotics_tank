@@ -49,10 +49,10 @@ class MissionConfig:
     line_code_seven_is_center: bool = True
     line_crawl_speed: int = 650
     line_base_speed: int = 980
-    line_pd_kp: float = 145.0
-    line_pd_kd: float = 60.0
-    line_max_turn: int = 420
-    line_turn_slowdown: float = 0.18
+    line_pd_kp: float = 240.0
+    line_pd_kd: float = 100.0
+    line_max_turn: int = 720
+    line_turn_slowdown: float = 0.34
     line_min_forward_duty: int = 700
     line_command_map: Dict[int, Tuple[int, int]] = field(
         default_factory=lambda: dict(_DEFAULT_LINE_MAP)
@@ -60,7 +60,7 @@ class MissionConfig:
     # Per-tick wheel-duty change cap. Keeps a line code flip from slamming the
     # chassis sideways in one tick, which is the main source of noisy wheel
     # chatter on the real robot.
-    line_max_wheel_delta: int = 700
+    line_max_wheel_delta: int = 900
     # When there is no line at startup, move forward briefly to put the sensor
     # bar over the tape before sweeping. Once we have seen the line, a later
     # loss first backs out of the last command, then sweeps slowly.

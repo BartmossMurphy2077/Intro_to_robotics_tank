@@ -12,10 +12,10 @@
   "line_crawl_speed": 650,
   "_comment_line_pd": "Visible-line steering uses a deterministic PD controller. base is straight speed, kp/kd shape correction, max_turn caps steering authority, slowdown reduces base speed for hard corrections.",
   "line_base_speed": 980,
-  "line_pd_kp": 145.0,
-  "line_pd_kd": 60.0,
-  "line_max_turn": 420,
-  "line_turn_slowdown": 0.18,
+  "line_pd_kp": 240.0,
+  "line_pd_kd": 100.0,
+  "line_max_turn": 720,
+  "line_turn_slowdown": 0.34,
   "line_min_forward_duty": 700,
   "_comment_line_command_map": "IR code -> [left_duty, right_duty]. Keep the normal map soft and forward-biased so the chassis does not pivot in place or chatter audibly when the IR code flips. Code 7 is centered for the Freenove V2 sensor behavior seen on the real robot.",
   "line_command_map": {
@@ -29,7 +29,7 @@
   },
 
   "_comment_line_steer_limit": "Max change in either wheel duty per tick. Smooths bang-bang transitions so a single noisy IR flip cannot slam the chassis sideways in one tick. Keep it below the vendor turn swings but above crawl speed so the robot still recovers promptly.",
-  "line_max_wheel_delta": 700,
+  "line_max_wheel_delta": 900,
   "_comment_line_recovery": "If the line is not visible at startup, move forward briefly to put the IR bar over the tape. If the line is lost after it was seen, backtrack briefly before a bounded sweep.",
   "line_startup_probe_s": 0.55,
   "line_startup_probe_speed": 700,
