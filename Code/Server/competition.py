@@ -110,8 +110,8 @@ ENABLE_VISION     = True   # Camera-based red-ball detection
 #               directly.
 # ══════════════════════════════════════════════════════════════════════════════
 
-TURN_90_S          = 0.75  # seconds to rotate 90 ° at full motor duty
-TURN_STRENGTH      = 0.40  # 0.0–1.0 — motor duty scale for TIMED turns
+TURN_90_S          = 0.85  # seconds to rotate 90 ° at full motor duty
+TURN_STRENGTH      = 0.45  # 0.0–1.0 — motor duty scale for TIMED turns
                            # (obstacle bypass, return-home).  Raise if the
                            # robot under-shoots 90°, lower if it over-shoots.
 LINE_TURN_STRENGTH = 0.50  # 0.0–1.0 — motor duty scale for IR line-follow
