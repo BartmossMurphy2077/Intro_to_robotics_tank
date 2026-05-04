@@ -111,13 +111,12 @@ ENABLE_VISION     = True   # Camera-based red-ball detection
 # ══════════════════════════════════════════════════════════════════════════════
 
 TURN_90_S          = 0.75  # seconds to rotate 90 ° at full motor duty
-TURN_STRENGTH      = 0.50  # 0.0–1.0 — motor duty scale for TIMED turns
+TURN_STRENGTH      = 0.40  # 0.0–1.0 — motor duty scale for TIMED turns
                            # (obstacle bypass, return-home).  Raise if the
                            # robot under-shoots 90°, lower if it over-shoots.
-LINE_TURN_STRENGTH = 0.30  # 0.0–1.0 — motor duty scale for IR line-follow
-                           # turns only (runs every 50 ms, so even a small
-                           # differential accumulates fast — keep this low).
-                           # Raise for sharper cornering, lower to soften.
+LINE_TURN_STRENGTH = 0.50  # 0.0–1.0 — motor duty scale for IR line-follow
+                           # turns only.  Higher = sharper cornering.
+                           # Lower = softer / less oscillation on straights.
 FORWARD_MPS        = 0.30  # metres/second at motor duty 2000
 WHEEL_BASE_M     = 0.155   # metres between left and right track centres
 SPEED_SCALE      = FORWARD_MPS / 2000.0   # m/s per duty unit (auto-computed)
@@ -143,8 +142,8 @@ MIN_BALL_AREA_PX = 800      # minimum contour area (px²) to count as ball
 BALL_HYSTERESIS  = 3        # consecutive frames with ball before "confirmed"
 
 # Main loop
-LOOP_HZ = 20
-LOOP_DT = 1.0 / LOOP_HZ    # 50 ms per tick; max dt cap prevents tracker jump
+LOOP_HZ = 30
+LOOP_DT = 1.0 / LOOP_HZ    # ~33 ms per tick; max dt cap prevents tracker jump
 
 # ── Servo angle positions ─────────────────────────────────────────────────────
 #   Arm  ch0: 90° = raised (home/parked),  130° = lowered to ground
