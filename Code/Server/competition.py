@@ -119,12 +119,12 @@ TURN_STRENGTH      = 0.55  # 0.0–1.0 — motor duty scale for obstacle bypass
 # ── Line-follow params ───────────────────────────────────────────────────────
 LINE_FORWARD_STRENGTH = 0.70  # 0.0–1.0 — scales straight-ahead duty (1500 → ~1050)
                               # Lower = slower forward speed on straight sections.
-LINE_TURN_STRENGTH    = 0.35  # 0.0–1.0 — scales turn duty during IR steering
+LINE_TURN_STRENGTH    = 0.40  # 0.0–1.0 — scales turn duty during IR steering
                               # Lower = gentler corrections, less oscillation.
-MIN_TURN_DUTY      = 550   # minimum |duty| for any scaled turn motor;
+MIN_TURN_DUTY      = 350   # minimum |duty| for any scaled turn motor;
                            # prevents motors stalling in the PWM dead-band.
 FORWARD_MPS        = 0.30  # metres/second at motor duty 2000
-WHEEL_BASE_M     = 0.155   # metres between left and right track centres
+WHEEL_BASE_M     = 0.135   # metres between left and right track centres
 SPEED_SCALE      = FORWARD_MPS / 2000.0   # m/s per duty unit (auto-computed)
 
 # Detection thresholds
