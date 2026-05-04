@@ -15,7 +15,8 @@
   "line_pd_kp": 155.0,
   "line_pd_kd": 65.0,
   "line_max_turn": 380,
-  "line_turn_slowdown": 0.40,
+  "line_turn_slowdown": 0.24,
+  "line_min_forward_duty": 320,
   "_comment_line_command_map": "IR code -> [left_duty, right_duty]. Keep the normal map soft and forward-biased so the chassis does not pivot in place or chatter audibly when the IR code flips. Code 7 is centered for the Freenove V2 sensor behavior seen on the real robot.",
   "line_command_map": {
     "0": [700, 700],

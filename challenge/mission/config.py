@@ -53,6 +53,7 @@ class MissionConfig:
     line_pd_kd: float = 80.0
     line_max_turn: int = 420
     line_turn_slowdown: float = 0.35
+    line_min_forward_duty: int = 300
     line_command_map: Dict[int, Tuple[int, int]] = field(
         default_factory=lambda: dict(_DEFAULT_LINE_MAP)
     )

@@ -171,11 +171,18 @@ class LineFollower(Behavior):
         turn = max(-max_turn, min(max_turn, int(round(raw_turn))))
 
         slowdown = max(0.0, min(0.8, float(self.config.line_turn_slowdown)))
-        base = int(round(self.config.line_base_speed * (1.0 - slowdown * min(1.0, abs(error) / 2.0))))
+        turn_factor = min(1.0, abs(error) / 2.0)
+        base = int(round(self.config.line_base_speed - (self.config.line_base_speed * slowdown * turn_factor)))
         base = max(self.config.line_crawl_speed, base)
+        min_forward = max(self.config.line_crawl_speed, int(self.config.line_min_forward_duty))
+        base = max(base, min_forward)
 
         left = base + turn
         right = base - turn
+        if left > 0:
+            left = max(left, min_forward)
+        if right > 0:
+            right = max(right, min_forward)
         return max(0, left), max(0, right)
 
     def _search_step(self, ctx: MissionContext) -> None:

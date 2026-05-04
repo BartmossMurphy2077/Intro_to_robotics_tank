@@ -38,6 +38,7 @@ def test_default_config_loads_and_applies() -> None:
     assert cfg.line_pd_kp > 0
     assert cfg.line_pd_kd >= 0
     assert cfg.line_max_turn > 0
+    assert cfg.line_min_forward_duty >= cfg.line_crawl_speed
     assert 300 <= cfg.line_max_wheel_delta <= 650
     assert cfg.line_startup_probe_speed >= cfg.line_crawl_speed
     assert cfg.line_backtrack_s > 0
@@ -94,7 +95,8 @@ def test_line_follower_pd_outputs_smooth_forward_corrections() -> None:
         line_pd_kp=150,
         line_pd_kd=0,
         line_max_turn=350,
-        line_turn_slowdown=0.4,
+        line_turn_slowdown=0.2,
+        line_min_forward_duty=320,
         line_max_wheel_delta=1000,
     )
     follower = LineFollower(cfg, line_memory=[], line_graph=_DummyGraph())
@@ -105,7 +107,7 @@ def test_line_follower_pd_outputs_smooth_forward_corrections() -> None:
     left, right = ctx.drives[-1]
     assert left > right
     assert left >= 0 and right >= 0
-    assert abs(left - right) <= cfg.line_max_turn * 2
+    assert min(left, right) >= cfg.line_min_forward_duty
 
 
 def test_line_follower_startup_probe_moves_forward_before_sweep() -> None:
