@@ -91,15 +91,12 @@ def main() -> None:
                 print(f"[sim] visualizer disabled: {exc}")
                 visualizer = None
 
+        from challenge.runtime.commands import handle_command
+
         for _ in range(max(0, args.ticks)):
             if visualizer is not None:
                 for command in visualizer.poll_commands():
-                    if command in ("w", "a", "s", "d"):
-                        runner.mission.start_manual_drive(command, runner.config.loop_sleep_s * 4.0)
-                    elif command == "space":
-                        runner.mission.manual_pickup_toggle()
-                    elif command == "home":
-                        runner.mission.reset_home_anchor()
+                    handle_command(command, runner.mission, runner.config)
                 if visualizer.should_quit():
                     break
             runner.tick()
