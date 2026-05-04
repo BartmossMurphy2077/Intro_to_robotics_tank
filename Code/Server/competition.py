@@ -110,9 +110,15 @@ ENABLE_VISION     = True   # Camera-based red-ball detection
 #               directly.
 # ══════════════════════════════════════════════════════════════════════════════
 
-TURN_90_S        = 0.75    # seconds to rotate 90 ° at motor duty ±1500
-TURN_TIME_SCALE  = 0.40    # global multiplier applied to every turn duration
-FORWARD_MPS      = 0.30    # metres/second at motor duty 2000
+TURN_90_S          = 0.75  # seconds to rotate 90 ° at full motor duty
+TURN_STRENGTH      = 0.50  # 0.0–1.0 — motor duty scale for TIMED turns
+                           # (obstacle bypass, return-home).  Raise if the
+                           # robot under-shoots 90°, lower if it over-shoots.
+LINE_TURN_STRENGTH = 0.30  # 0.0–1.0 — motor duty scale for IR line-follow
+                           # turns only (runs every 50 ms, so even a small
+                           # differential accumulates fast — keep this low).
+                           # Raise for sharper cornering, lower to soften.
+FORWARD_MPS        = 0.30  # metres/second at motor duty 2000
 WHEEL_BASE_M     = 0.155   # metres between left and right track centres
 SPEED_SCALE      = FORWARD_MPS / 2000.0   # m/s per duty unit (auto-computed)
 
@@ -429,14 +435,15 @@ class CompetitionRobot:
         Spin in-place for `duration` seconds.
         For a true in-place spin (left=-right), v=0 so only heading changes.
 
-        A single global multiplier (TURN_TIME_SCALE) is applied here so turn
-        behaviour can be tuned in one place instead of changing every caller.
+        TURN_STRENGTH scales the motor duty so the robot turns more gently.
+        Lower TURN_STRENGTH → slower spin → less rotation in the same time.
         """
-        effective_duration = duration * TURN_TIME_SCALE
-        self._drive(left, right)
+        sl = int(left  * TURN_STRENGTH)
+        sr = int(right * TURN_STRENGTH)
+        self._drive(sl, sr)
         t0 = time.time()
-        while time.time() - t0 < effective_duration:
-            self.tracker.update(left, right, LOOP_DT)
+        while time.time() - t0 < duration:
+            self.tracker.update(sl, sr, LOOP_DT)
             time.sleep(LOOP_DT)
         self._stop()
 
@@ -790,6 +797,11 @@ class CompetitionRobot:
         # ── Priority 3: IR line steer ─────────────────────────────────────────
         if ENABLE_INFRARED and self.infrared:
             left, right = self._step_line_follow()
+            # Scale turn duty by LINE_TURN_STRENGTH; straight commands pass
+            # through unscaled.  A command is a turn when the two sides differ.
+            if left != right:
+                left  = int(left  * LINE_TURN_STRENGTH)
+                right = int(right * LINE_TURN_STRENGTH)
             self._drive(left, right)
         else:
             # IR disabled — remain stationary
@@ -1049,10 +1061,10 @@ EXAMPLES
 
 CALIBRATION CONSTANTS  (edit at top of file)
 ----------------------------------------------
-  TURN_90_S    seconds for a 90-degree turn at duty ±1500
-    TURN_TIME_SCALE global multiplier applied to every turn duration
-  FORWARD_MPS  metres/second at duty 2000
-  WHEEL_BASE_M distance between tracks in metres
+  TURN_90_S     seconds for a 90-degree turn at full duty ±1500
+  TURN_STRENGTH  0.0-1.0 multiplier on turn motor duty (obstacle + line turns)
+  FORWARD_MPS   metres/second at motor duty 2000
+  WHEEL_BASE_M  distance between tracks in metres
         """,
     )
 
