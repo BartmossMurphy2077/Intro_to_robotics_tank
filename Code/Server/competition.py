@@ -121,6 +121,8 @@ LINE_FORWARD_STRENGTH = 0.70  # 0.0–1.0 — scales straight-ahead duty (1500 �
                               # Lower = slower forward speed on straight sections.
 LINE_TURN_STRENGTH    = 0.35  # 0.0–1.0 — scales turn duty during IR steering
                               # Lower = gentler corrections, less oscillation.
+MIN_TURN_DUTY      = 550   # minimum |duty| for any scaled turn motor;
+                           # prevents motors stalling in the PWM dead-band.
 FORWARD_MPS        = 0.30  # metres/second at motor duty 2000
 WHEEL_BASE_M     = 0.155   # metres between left and right track centres
 SPEED_SCALE      = FORWARD_MPS / 2000.0   # m/s per duty unit (auto-computed)
@@ -401,6 +403,7 @@ class CompetitionRobot:
         # Internal bookkeeping
         self._left_duty      = 0
         self._right_duty     = 0
+        self._drive_log_tick = 0     # throttles motor-duty console logging
         self._ball_last_seen = 0.0   # timestamp of last positive ball detection
         self._last_ir_cmd    = LINE_FORWARD  # last non-zero IR command (used when line briefly lost)
 
@@ -420,18 +423,34 @@ class CompetitionRobot:
     def _drive(self, left: int, right: int):
         self._left_duty  = left
         self._right_duty = right
+        self._drive_log_tick += 1
+        if self._drive_log_tick % 20 == 0:
+            print(f"[Motor] L={left:+5d}  R={right:+5d}")
         self.motor.setMotorModel(left, right)
 
     def _stop(self):
         self._drive(0, 0)
 
-    def _drive_timed(self, left: int, right: int, duration: float):
-        """Drive for `duration` seconds, updating the position tracker."""
+    def _drive_timed(self, left: int, right: int, duration: float,
+                     abort_on_line: bool = False) -> bool:
+        """Drive for `duration` seconds, updating the position tracker.
+
+        If abort_on_line is True the drive stops early and returns True as
+        soon as any IR sensor detects the line — useful in obstacle-bypass
+        forward drives so the robot doesn't overshoot the track.
+        Returns False when the full duration elapsed.
+        """
         t0 = time.time()
         self._drive(left, right)
         while time.time() - t0 < duration:
             self.tracker.update(left, right, LOOP_DT)
+            if (abort_on_line and ENABLE_INFRARED and self.infrared
+                    and self.infrared.read_all_infrared() > 0):
+                self._stop()
+                print("[Drive] Line detected mid-drive — stopping early")
+                return True
             time.sleep(LOOP_DT)
+        return False
 
     def _turn_timed(self, left: int, right: int, duration: float):
         """
@@ -443,6 +462,9 @@ class CompetitionRobot:
         """
         sl = int(left  * TURN_STRENGTH)
         sr = int(right * TURN_STRENGTH)
+        # Clamp to MIN_TURN_DUTY so neither motor stalls in the PWM dead-band
+        sl = sl if sl == 0 else (max(abs(sl), MIN_TURN_DUTY) * (1 if sl > 0 else -1))
+        sr = sr if sr == 0 else (max(abs(sr), MIN_TURN_DUTY) * (1 if sr > 0 else -1))
         self._drive(sl, sr)
         t0 = time.time()
         while time.time() - t0 < duration:
@@ -647,19 +669,19 @@ class CompetitionRobot:
         self._turn_timed(-1500, 1500, TURN_90_S)
 
         # 3. Drive forward to clear the obstacle's side  →  (-side, 0)
-        self._drive_timed(1500, 1500, BYPASS_FORWARD_S)
+        self._drive_timed(1500, 1500, BYPASS_FORWARD_S, abort_on_line=True)
 
         # 4. Turn RIGHT 90°  →  now facing North (original heading) again
         self._turn_timed(1500, -1500, TURN_90_S)
 
         # 5. Drive forward to clear the obstacle's front  →  (-side, front)
-        self._drive_timed(1500, 1500, BYPASS_FORWARD_S)
+        self._drive_timed(1500, 1500, BYPASS_FORWARD_S, abort_on_line=True)
 
         # 6. Turn RIGHT 90°  →  now facing East (toward the line)
         self._turn_timed(1500, -1500, TURN_90_S)
 
         # 7. Drive East to return to the original line column  →  (0, front)
-        self._drive_timed(1500, 1500, BYPASS_FORWARD_S)
+        self._drive_timed(1500, 1500, BYPASS_FORWARD_S, abort_on_line=True)
 
         # 8. Turn LEFT 90°  →  now facing North (original heading) again
         self._turn_timed(-1500, 1500, TURN_90_S)
@@ -677,7 +699,9 @@ class CompetitionRobot:
         self._stop()
 
         if found:
-            print("[Obstacle] Line re-acquired")
+            # Backtrack slightly so the robot sits ON the line rather than just past it
+            self._drive_timed(-800, -800, 0.15)
+            print("[Obstacle] Line re-acquired (backtracked onto line)")
         else:
             print("[Obstacle] WARNING — line not found after bypass")
 
@@ -804,6 +828,9 @@ class CompetitionRobot:
                 # Turn command — scale by LINE_TURN_STRENGTH
                 left  = int(left  * LINE_TURN_STRENGTH)
                 right = int(right * LINE_TURN_STRENGTH)
+                # Clamp to MIN_TURN_DUTY so neither motor stalls
+                left  = left  if left  == 0 else (max(abs(left),  MIN_TURN_DUTY) * (1 if left  > 0 else -1))
+                right = right if right == 0 else (max(abs(right), MIN_TURN_DUTY) * (1 if right > 0 else -1))
             else:
                 # Straight command — scale by LINE_FORWARD_STRENGTH
                 left  = int(left  * LINE_FORWARD_STRENGTH)
