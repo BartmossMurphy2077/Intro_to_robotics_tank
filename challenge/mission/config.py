@@ -26,6 +26,9 @@ _VENDOR_LINE_MAP: Dict[int, Tuple[int, int]] = {
 class MissionConfig:
     """Single configuration object for the challenge mission."""
 
+    # Set by main when a tuning JSON (CMA-ES / GA output) is loaded — HUD only.
+    trained_params_source: str | None = None
+
     # Loop / cadence.
     loop_sleep_s: float = 0.05
 
@@ -63,9 +66,17 @@ class MissionConfig:
     carry_servo0_angle: int = 150
     carry_servo1_angle: int = 140
     carry_pose_settle_s: float = 0.15
-    # Vendor `mode_clamp_down` sweep starts servo0 from 130->90. Pre-position
-    # there before drop on real hardware to ensure full down travel.
+    # Vendor `mode_clamp_down` sweep starts servo0 from 130 and stops at 91.
+    # We ramp into 130 from the carry pose (avoids a 20-deg jerk) and then
+    # explicitly drive servo0 to `arm_min_angle` afterwards so the arm
+    # actually reaches the bottom rather than the vendor off-by-one stop.
     drop_prep_servo0_angle: int = 130
+    arm_min_angle: int = 90        # vendor servo limit floor
+    arm_max_angle: int = 150       # vendor servo limit ceiling
+    jaw_open_angle: int = 90       # servo1: jaws fully open
+    jaw_closed_angle: int = 140    # servo1: jaws fully closed (carry/grip)
+    arm_ramp_step_deg: int = 1
+    arm_ramp_step_s: float = 0.012
 
     # Dead-reckoning return-to-start.
     duty_to_mps: float = 0.00022
@@ -106,15 +117,18 @@ class MissionConfig:
     # the opposite polarity we can either force inversion or auto-learn it.
     ir_invert_bits: bool = False
     ir_auto_invert_bits: bool = True
+    # When True, the controller prints a one-line IR debug each time the
+    # effective IR code changes (toggle live with the `i` key).
+    ir_debug_log: bool = False
 
-    # Manual override behavior. While the user is driving with WASD we disable
-    # autonomous logic. The mission stays "latched" in manual mode until the
-    # user types `auto` (or after `manual_idle_stop_s` of inactivity, when
-    # wheels stop and autonomy resumes).
-    manual_dwell_s: float = 0.30
-    manual_idle_stop_s: float = 0.50
+    # Manual override (single-character control scheme).
+    # Each WASD press drives the wheels at the configured duty for
+    # `manual_dwell_s` seconds. After that, wheels stop automatically (no
+    # auto-creep). Q (or `start`) resumes autonomous behaviors. E (or `stop`)
+    # halts wheels and stays in manual mode.
+    manual_dwell_s: float = 0.45
     manual_speed_forward: int = 900
-    manual_speed_turn: int = 850
+    manual_speed_turn: int = 1100
 
 
 __all__ = ["MissionConfig"]

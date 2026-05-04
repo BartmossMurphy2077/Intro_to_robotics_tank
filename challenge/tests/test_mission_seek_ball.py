@@ -35,7 +35,10 @@ def test_seek_ball_locks_then_picks_and_returns():
 
         assert runner.mission.state == MissionState.PICK_BALL
 
-        runner.tick()
+        for _ in range(250):
+            if runner.mission.state != MissionState.PICK_BALL:
+                break
+            runner.tick()
 
         assert runner.mission.state == MissionState.RETURN_HOME
         assert runner.mission.is_carrying_ball()

@@ -39,7 +39,7 @@ class PygameVisualizer:
             if event.type == pygame.QUIT:
                 self._quit = True
             elif event.type == pygame.KEYDOWN:
-                if event.key in (pygame.K_ESCAPE, pygame.K_q):
+                if event.key == pygame.K_ESCAPE:
                     self._quit = True
                 elif event.key == pygame.K_w:
                     commands.append("w")
@@ -51,12 +51,14 @@ class PygameVisualizer:
                     commands.append("d")
                 elif event.key == pygame.K_e:
                     commands.append("stop")
+                elif event.key == pygame.K_q:
+                    commands.append("start")
+                elif event.key == pygame.K_i:
+                    commands.append("i")
+                elif event.key == pygame.K_h:
+                    commands.append("h")
                 elif event.key == pygame.K_SPACE:
                     commands.append("space")
-                elif event.key == pygame.K_h:
-                    commands.append("home")
-                elif event.key == pygame.K_r:
-                    commands.append("auto")
                 elif event.key in (pygame.K_EQUALS, pygame.K_PLUS):
                     self._speed = min(8.0, self._speed * 1.25)
                 elif event.key in (pygame.K_MINUS, pygame.K_UNDERSCORE):
@@ -191,20 +193,28 @@ class PygameVisualizer:
         pygame.draw.rect(self.screen, (248, 248, 244), rect)
         pygame.draw.rect(self.screen, (45, 45, 42), rect, width=2)
         status = mission.get_status()
-        mode = "MANUAL" if status.get("manual") else "AUTO"
+        mode = "AUTO" if status.get("operator_auto") else "MANUAL"
+        ir_used = int(status.get("ir", 7)) & 0b111
+        ir_raw = int(status.get("ir_raw", ir_used)) & 0b111
+        ir_inv = int(status.get("ir_inverted", 0))
+        line_seen = "yes" if status.get("line_seen", 0) else "NO"
+        dl = status.get("duty_l", 0)
+        dr = status.get("duty_r", 0)
+        tuned = status.get("tuned") or "-"
         lines = [
-            f"{mode} - {status['state']}",
-            f"ir {status['ir']}    sonic {status['distance_cm']:5.1f} cm",
-            f"home {status['home_m']:.2f} m    carrying {status['carrying']}",
-            f"sim {self.world.tick_count} ticks  -  speed {self._speed:.2f}x",
+            f"{mode} - {status['state']}  (motors L/R {dl}/{dr})",
+            f"pose x={status['x_m']:.2f} y={status['y_m']:.2f} hdg={status['heading_deg']:.0f} deg",
+            f"ir used {ir_used:03b}  raw {ir_raw:03b}  inv {ir_inv}  line {line_seen}",
+            f"sonic {status['distance_cm']:5.1f} cm    home {status['home_m']:.2f} m",
+            f"carry {status['carrying']}  tune {str(tuned)[-28:]}  sim {self.world.tick_count} ({self._speed:.2f}x)",
         ]
-        y = rect.top + 16
+        y = rect.top + 12
         for line in lines:
             text = self.font.render(line, True, (32, 32, 30))
             self.screen.blit(text, (rect.left + 14, y))
-            y += 28
+            y += 26
         hint = self.small_font.render(
-            "WASD drive   E stop   Space pickup   R resume auto   H home   +/- speed   Q quit",
+            "Q toggle AUTO/MANUAL  E stop  WASD (manual)  Space pickup  +/- speed  ESC quit",
             True, (80, 80, 76),
         )
         self.screen.blit(hint, (rect.left + 14, rect.bottom - 28))

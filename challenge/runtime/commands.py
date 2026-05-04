@@ -1,8 +1,7 @@
 """Command dispatch for the runtime console.
 
-Each command maps to a small handler function. Adding a new command is one
-entry in `_COMMAND_HANDLERS` (or `_PREFIX_HANDLERS` for `set <param> <val>`
-style commands).
+Primary keys are handled in `runtime.loop` (Q / E / I). Here: WASD (when loop
+passes `operator_auto=False`), space (pick/drop), H (home), typed tuning.
 """
 
 from __future__ import annotations
@@ -13,15 +12,15 @@ from ..mission import ChallengeMission, MissionConfig
 
 
 EmitLine = Callable[[str], None]
-HandlerResult = bool  # True = consumed, False = not handled
 
 
 HELP_TEXT = (
-    "commands: start  w a s d (manual drive)  e/stop (hard stop)  space (pickup toggle)  auto (resume autonomy)  "
-    "home (reset anchor)  status  help\n"
-    "  set <param> <value>          (pickup-cm, obstacle-cm, line-crawl-speed)\n"
-    "  get <param>\n"
-    "  setmap <code> <left> <right> (override IR-to-duty mapping)"
+    "controls:  Q toggle AUTO/MANUAL | E stop | WASD (manual only) | "
+    "space pickup | I ir-debug | H home\n"
+    "tuning (typed):  status | help | set <param> <value> | get <param> | "
+    "setmap <code> <left> <right>\n"
+    "  params:  pickup-cm  obstacle-cm  line-crawl-speed  home-radius-m  "
+    "manual-speed-forward  manual-speed-turn  manual-dwell-s  ir-majority-window"
 )
 
 
@@ -30,21 +29,29 @@ def handle_command(
     mission: ChallengeMission,
     cfg: MissionConfig,
     emit_line: EmitLine = print,
+    *,
+    operator_auto: bool = False,
 ) -> bool:
     """Try to dispatch `command`. Return True if it was handled."""
     if not command:
         return False
 
-    # Single-key manual drive — latches manual mode (no auto-creep).
+    # Single-key manual drive — ignored while operator AUTO is on.
     if command in ("w", "a", "s", "d"):
+        if operator_auto:
+            emit_line("[challenge] WASD only in MANUAL (press Q)")
+            return True
         mission.start_manual_drive(command)
         return True
 
     if command in (" ", "space"):
         mission.manual_pickup_toggle()
         return True
-    if command in ("e", "stop"):
-        mission.stop_drive()
+
+    # H = reset home anchor.
+    if command == "h":
+        mission.reset_home_anchor()
+        emit_line("[challenge] home anchor reset")
         return True
 
     handler = _COMMAND_HANDLERS.get(command)
@@ -60,51 +67,31 @@ def handle_command(
     return False
 
 
-# ---------- single-word commands ----------
-
-
-def _cmd_home(mission: ChallengeMission, cfg: MissionConfig, emit: EmitLine) -> None:
-    mission.reset_home_anchor()
-    emit("[challenge] home anchor reset")
-
-
-def _cmd_auto(mission: ChallengeMission, cfg: MissionConfig, emit: EmitLine) -> None:
-    if mission.is_manual_mode():
-        mission.resume_autonomous()
-        emit("[challenge] autonomous resumed")
-    else:
-        emit("[challenge] already autonomous")
+# ---------- typed helper commands ----------
 
 
 def _cmd_status(mission: ChallengeMission, cfg: MissionConfig, emit: EmitLine) -> None:
     s = mission.get_status()
-    mode = "manual" if s.get("manual") else "auto"
+    op = "AUTO" if s.get("operator_auto") else "MAN"
     emit(
-        f"[challenge] mode={mode} state={s['state']} reason={s['state_reason']} "
-        f"age={float(s['state_age_s']):.2f}s ir={s['ir']} dist={s['distance_cm']:.1f}cm "
-        f"carry={s['carrying']} home={s['home_m']:.2f}m"
+        f"[challenge] {op} state={s['state']} reason={s['state_reason']} "
+        f"x={s['x_m']:.2f} y={s['y_m']:.2f} hdg={s['heading_deg']:.0f}° "
+        f"L/R={s['duty_l']}/{s['duty_r']} "
+        f"ir={s['ir']:03b} raw={s.get('ir_raw', 0):03b} inv={s.get('ir_inverted', 0)} "
+        f"line={'yes' if s.get('line_seen', 0) else 'NO'} "
+        f"dist={s['distance_cm']:.1f}cm carry={s['carrying']} home={s['home_m']:.2f}m "
+        f"tuned={s.get('tuned') or '-'}"
     )
 
 
 def _cmd_help(mission: ChallengeMission, cfg: MissionConfig, emit: EmitLine) -> None:
-    emit("[challenge] " + HELP_TEXT)
-
-
-def _cmd_map(mission: ChallengeMission, cfg: MissionConfig, emit: EmitLine) -> None:
-    try:
-        emit(mission.get_map_string(size_m=2.0, resolution=41))
-    except Exception as exc:
-        emit(f"[challenge] map error: {exc}")
+    emit("[challenge]\n" + HELP_TEXT)
 
 
 _COMMAND_HANDLERS: dict[str, Callable[[ChallengeMission, MissionConfig, EmitLine], None]] = {
-    "home": _cmd_home,
-    "auto": _cmd_auto,
-    "resume": _cmd_auto,
     "status": _cmd_status,
     "help": _cmd_help,
     "?": _cmd_help,
-    "map": _cmd_map,
 }
 
 
@@ -112,11 +99,14 @@ _COMMAND_HANDLERS: dict[str, Callable[[ChallengeMission, MissionConfig, EmitLine
 
 
 _NUMERIC_PARAMS: dict[str, str] = {
-    # alias -> attribute name on MissionConfig
     "pickup-cm": "pickup_distance_cm",
     "obstacle-cm": "obstacle_distance_cm",
     "line-crawl-speed": "line_crawl_speed",
     "home-radius-m": "home_radius_m",
+    "manual-speed-forward": "manual_speed_forward",
+    "manual-speed-turn": "manual_speed_turn",
+    "manual-dwell-s": "manual_dwell_s",
+    "ir-majority-window": "ir_majority_window",
 }
 
 
