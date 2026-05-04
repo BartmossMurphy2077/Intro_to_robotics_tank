@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -58,6 +59,22 @@ def parse_args() -> argparse.Namespace:
                    help="move the carry arm pose during calibration")
     p.add_argument("--calibrate-seconds", type=float, default=8.0)
     p.add_argument("--calibrate-interval", type=float, default=0.75)
+    p.add_argument(
+        "--ascii-cam",
+        action="store_true",
+        help="stream the robot camera as ASCII art in this terminal while the mission runs",
+    )
+    p.add_argument(
+        "--ascii-cam-fps",
+        type=int,
+        default=10,
+        help="target frame rate for the ASCII camera viewer (default 10)",
+    )
+    p.add_argument(
+        "--ascii-no-color",
+        action="store_true",
+        help="disable ANSI colour in the ASCII camera viewer",
+    )
     return p.parse_args()
 
 
@@ -167,6 +184,22 @@ def main() -> None:
             visualizer = None
 
     print(f"[challenge] mode={chosen_mode} scenario={args.scenario if chosen_mode == 'sim' else '-'}")
+
+    if args.ascii_cam:
+        from challenge.vision.ascii_view import run_loop
+
+        _cam_thread = threading.Thread(
+            target=run_loop,
+            kwargs={
+                "get_frame": car.camera.get_frame_bgr,
+                "fps": args.ascii_cam_fps,
+                "color": not args.ascii_no_color,
+            },
+            daemon=True,  # exits automatically when the main process ends
+            name="ascii-cam",
+        )
+        _cam_thread.start()
+        print(f"[challenge] ascii-cam started  fps={args.ascii_cam_fps}")
 
     run_mission(
         mission,
