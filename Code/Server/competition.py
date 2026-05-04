@@ -110,13 +110,17 @@ ENABLE_VISION     = True   # Camera-based red-ball detection
 #               directly.
 # ══════════════════════════════════════════════════════════════════════════════
 
-TURN_90_S          = 0.85  # seconds to rotate 90 ° at full motor duty
-TURN_STRENGTH      = 0.45  # 0.0–1.0 — motor duty scale for TIMED turns
-                           # (obstacle bypass, return-home).  Raise if the
-                           # robot under-shoots 90°, lower if it over-shoots.
-LINE_TURN_STRENGTH = 0.50  # 0.0–1.0 — motor duty scale for IR line-follow
-                           # turns only.  Higher = sharper cornering.
-                           # Lower = softer / less oscillation on straights.
+# ── Obstacle / timed-turn params ────────────────────────────────────────────
+TURN_90_S          = 0.95  # seconds to rotate 90 ° at full motor duty
+TURN_STRENGTH      = 0.55  # 0.0–1.0 — motor duty scale for obstacle bypass
+                           # and return-home pivots.
+                           # Raise if robot under-shoots 90°; lower to reduce overshoot.
+
+# ── Line-follow params ───────────────────────────────────────────────────────
+LINE_FORWARD_STRENGTH = 0.70  # 0.0–1.0 — scales straight-ahead duty (1500 → ~1050)
+                              # Lower = slower forward speed on straight sections.
+LINE_TURN_STRENGTH    = 0.35  # 0.0–1.0 — scales turn duty during IR steering
+                              # Lower = gentler corrections, less oscillation.
 FORWARD_MPS        = 0.30  # metres/second at motor duty 2000
 WHEEL_BASE_M     = 0.155   # metres between left and right track centres
 SPEED_SCALE      = FORWARD_MPS / 2000.0   # m/s per duty unit (auto-computed)
@@ -796,11 +800,14 @@ class CompetitionRobot:
         # ── Priority 3: IR line steer ─────────────────────────────────────────
         if ENABLE_INFRARED and self.infrared:
             left, right = self._step_line_follow()
-            # Scale turn duty by LINE_TURN_STRENGTH; straight commands pass
-            # through unscaled.  A command is a turn when the two sides differ.
             if left != right:
+                # Turn command — scale by LINE_TURN_STRENGTH
                 left  = int(left  * LINE_TURN_STRENGTH)
                 right = int(right * LINE_TURN_STRENGTH)
+            else:
+                # Straight command — scale by LINE_FORWARD_STRENGTH
+                left  = int(left  * LINE_FORWARD_STRENGTH)
+                right = int(right * LINE_FORWARD_STRENGTH)
             self._drive(left, right)
         else:
             # IR disabled — remain stationary
