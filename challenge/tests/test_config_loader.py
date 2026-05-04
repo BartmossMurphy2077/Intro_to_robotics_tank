@@ -34,6 +34,10 @@ def test_default_config_loads_and_applies() -> None:
     assert cfg.line_code_seven_is_center is True
     assert cfg.line_command_map[7] == (700, 700)
     # New tunables are present.
+    assert cfg.line_base_speed > cfg.line_crawl_speed
+    assert cfg.line_pd_kp > 0
+    assert cfg.line_pd_kd >= 0
+    assert cfg.line_max_turn > 0
     assert 300 <= cfg.line_max_wheel_delta <= 650
     assert cfg.line_startup_probe_speed >= cfg.line_crawl_speed
     assert cfg.line_backtrack_s > 0
@@ -83,6 +87,27 @@ def test_line_follower_treats_seven_as_center_when_configured() -> None:
     assert follower._duty_for_ir(7) == cfg.line_command_map[2]
 
 
+def test_line_follower_pd_outputs_smooth_forward_corrections() -> None:
+    cfg = MissionConfig(
+        line_base_speed=650,
+        line_crawl_speed=300,
+        line_pd_kp=150,
+        line_pd_kd=0,
+        line_max_turn=350,
+        line_turn_slowdown=0.4,
+        line_max_wheel_delta=1000,
+    )
+    follower = LineFollower(cfg, line_memory=[], line_graph=_DummyGraph())
+    ctx = _DummyContext(ir=3, now=1.0)
+
+    follower.step(ctx)
+
+    left, right = ctx.drives[-1]
+    assert left > right
+    assert left >= 0 and right >= 0
+    assert abs(left - right) <= cfg.line_max_turn * 2
+
+
 def test_line_follower_startup_probe_moves_forward_before_sweep() -> None:
     cfg = MissionConfig(
         line_code_seven_is_center=False,
@@ -111,12 +136,14 @@ def test_line_follower_backtracks_after_losing_seen_line() -> None:
     ctx.now_value = 1.2
     follower.step(ctx)
 
-    # First loss tick brakes toward reverse without snapping polarity; the
-    # second tick reaches the bounded backtrack command.
-    assert ctx.drives[-1] == (0, 0)
+    # First loss tick brakes toward reverse without snapping past the slew cap.
+    first_l, first_r = ctx.drives[-1]
+    assert -cfg.line_backtrack_speed <= first_l <= cfg.line_base_speed
+    assert -cfg.line_backtrack_speed <= first_r <= cfg.line_base_speed
     ctx.now_value = 1.25
     follower.step(ctx)
-    assert ctx.drives[-1] == (-420, -420)
+    assert ctx.drives[-1][0] < first_l
+    assert ctx.drives[-1][1] < first_r
 
 
 def test_pickup_grace_window_blocks_obstacle_check() -> None:

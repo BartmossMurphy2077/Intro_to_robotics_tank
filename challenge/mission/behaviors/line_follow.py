@@ -32,6 +32,14 @@ if TYPE_CHECKING:
 # rotation direction after the spiral search times out.
 _LINE_LEFT_CODES = frozenset({4, 6})
 _LINE_RIGHT_CODES = frozenset({1, 3})
+_LINE_ERROR = {
+    4: -1.0,
+    6: -2.0,
+    2: 0.0,
+    7: 0.0,
+    1: 1.0,
+    3: 2.0,
+}
 
 
 class LineFollower(Behavior):
@@ -63,6 +71,7 @@ class LineFollower(Behavior):
         self._lost_entry_ts: float = 0.0
         self._last_good_left: int = 0
         self._last_good_right: int = 0
+        self._last_error: float = 0.0
 
     @property
     def line_lost_ticks(self) -> int:
@@ -78,6 +87,7 @@ class LineFollower(Behavior):
         self._prev_right = 0
         self._reacquire_ticks = 0
         self._lost_entry_ts = 0.0
+        self._last_error = 0.0
 
     def is_line_lost(self, infrared_code: int) -> bool:
         if infrared_code == 7 and self.config.line_code_seven_is_center:
@@ -116,7 +126,7 @@ class LineFollower(Behavior):
         except Exception:
             pass
 
-        target_l, target_r = self._duty_for_ir(ir)
+        target_l, target_r = self._pd_duty_for_ir(ir)
         left, right = self._apply_steer_limit(target_l, target_r)
         if hasattr(ctx, "set_steer_target"):
             ctx.set_steer_target(target_l, target_r)
@@ -150,6 +160,23 @@ class LineFollower(Behavior):
             self._last_line_dir = +1
         # Code 2 (centered) leaves the previous direction in place — useful if
         # we lose the line again after a brief centering moment.
+
+    def _pd_duty_for_ir(self, infrared_code: int) -> tuple[int, int]:
+        error = _line_error_for_ir(infrared_code, self.config.line_code_seven_is_center)
+        derivative = error - self._last_error
+        self._last_error = error
+
+        raw_turn = self.config.line_pd_kp * error + self.config.line_pd_kd * derivative
+        max_turn = max(0, int(self.config.line_max_turn))
+        turn = max(-max_turn, min(max_turn, int(round(raw_turn))))
+
+        slowdown = max(0.0, min(0.8, float(self.config.line_turn_slowdown)))
+        base = int(round(self.config.line_base_speed * (1.0 - slowdown * min(1.0, abs(error) / 2.0))))
+        base = max(self.config.line_crawl_speed, base)
+
+        left = base + turn
+        right = base - turn
+        return max(0, left), max(0, right)
 
     def _search_step(self, ctx: MissionContext) -> None:
         self._line_lost_ticks += 1
@@ -245,6 +272,12 @@ def _clamp_abs(value: int, cap: int) -> int:
     if cap <= 0:
         return int(value)
     return max(-cap, min(cap, int(value)))
+
+
+def _line_error_for_ir(infrared_code: int, seven_is_center: bool = True) -> float:
+    if infrared_code == 7 and not seven_is_center:
+        return 0.0
+    return _LINE_ERROR.get(infrared_code, 0.0)
 
 
 __all__ = ["LineFollower"]

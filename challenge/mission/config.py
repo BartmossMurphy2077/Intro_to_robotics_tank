@@ -48,6 +48,11 @@ class MissionConfig:
     # operators can disable this if their board reports 111 off-line.
     line_code_seven_is_center: bool = True
     line_crawl_speed: int = 380
+    line_base_speed: int = 650
+    line_pd_kp: float = 170.0
+    line_pd_kd: float = 80.0
+    line_max_turn: int = 420
+    line_turn_slowdown: float = 0.35
     line_command_map: Dict[int, Tuple[int, int]] = field(
         default_factory=lambda: dict(_DEFAULT_LINE_MAP)
     )
