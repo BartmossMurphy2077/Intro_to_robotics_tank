@@ -39,7 +39,7 @@ def test_default_config_loads_and_applies() -> None:
     assert cfg.line_pd_kd >= 0
     assert cfg.line_max_turn > 0
     assert cfg.line_min_forward_duty >= cfg.line_crawl_speed
-    assert 300 <= cfg.line_max_wheel_delta <= 650
+    assert 500 <= cfg.line_max_wheel_delta <= 900
     assert cfg.line_startup_probe_speed >= cfg.line_crawl_speed
     assert cfg.line_backtrack_s > 0
     assert cfg.carry_obstacle_grace_s == 1.5
@@ -90,13 +90,13 @@ def test_line_follower_treats_seven_as_center_when_configured() -> None:
 
 def test_line_follower_pd_outputs_smooth_forward_corrections() -> None:
     cfg = MissionConfig(
-        line_base_speed=650,
-        line_crawl_speed=300,
-        line_pd_kp=150,
+        line_base_speed=820,
+        line_crawl_speed=420,
+        line_pd_kp=145,
         line_pd_kd=0,
-        line_max_turn=350,
-        line_turn_slowdown=0.2,
-        line_min_forward_duty=320,
+        line_max_turn=420,
+        line_turn_slowdown=0.18,
+        line_min_forward_duty=450,
         line_max_wheel_delta=1000,
     )
     follower = LineFollower(cfg, line_memory=[], line_graph=_DummyGraph())
