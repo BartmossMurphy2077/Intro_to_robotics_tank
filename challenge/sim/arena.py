@@ -43,6 +43,15 @@ class Ball:
 
 
 @dataclass
+class BaseMarker:
+    cx: float
+    cy: float
+    half_w: float = 0.18
+    half_h: float = 0.18
+    post_color_rgb: Tuple[int, int, int] = (35, 95, 210)
+
+
+@dataclass
 class Arena:
     width_m: float = 4.0
     height_m: float = 4.0
@@ -50,6 +59,7 @@ class Arena:
     circle_obstacles: List[CircleObstacle] = field(default_factory=list)
     rect_obstacles: List[RectObstacle] = field(default_factory=list)
     balls: List[Ball] = field(default_factory=list)
+    bases: List[BaseMarker] = field(default_factory=list)
     robot_start: Tuple[float, float, float] = (0.0, 0.0, 0.0)  # (x, y, theta)
 
     # Line mask cache (lazy)

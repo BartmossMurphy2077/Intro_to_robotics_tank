@@ -118,6 +118,16 @@ class PygameVisualizer:
         pygame = self.pygame
         arena = self.world.arena
 
+        for base in arena.bases:
+            cx, cy = self._to_screen(rect, base.cx, base.cy)
+            scale = rect.width / max(arena.width_m, 0.01)
+            box = pygame.Rect(0, 0, int(base.half_w * 2 * scale), int(base.half_h * 2 * scale))
+            box.center = (cx, cy)
+            pygame.draw.rect(self.screen, (232, 235, 24), box)
+            pygame.draw.rect(self.screen, (245, 245, 245), box, width=2)
+            post_r = max(4, int(round(0.045 * scale)))
+            pygame.draw.circle(self.screen, base.post_color_rgb, (cx, cy), post_r)
+
         for line in arena.line_polylines:
             points = [self._to_screen(rect, x, y) for x, y in line.points_m]
             width_px = max(2, int(round(line.width_m * rect.width / max(arena.width_m, 0.01))))

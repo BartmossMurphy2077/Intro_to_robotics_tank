@@ -37,3 +37,16 @@ def test_clamp_pickup_requires_ball_in_reach():
 
     assert world.carrying_ball
     assert len(world.arena.balls) == 0
+
+
+def test_full_course_starts_on_base_off_line_then_reaches_track():
+    world = build_world("full-course", seed=1)
+
+    assert world.arena.bases
+    assert world.read_ir_code() == 0
+
+    for _ in range(int(0.55 / world.config.dt_s)):
+        world.set_motor_cmd(360, 360)
+        world.tick(world.config.dt_s)
+
+    assert world.read_ir_code() != 0

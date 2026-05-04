@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from .arena import Arena, CircleObstacle, Polyline, RectObstacle
+from .arena import Arena, BaseMarker, CircleObstacle, Polyline, RectObstacle
 from .world import SimConfig, SimWorld
 
 ROBOT_LINE_WIDTH_M = 0.12
@@ -56,21 +56,34 @@ def _full_course(*, seed: int | None) -> SimWorld:
     arena.line_polylines.append(
         Polyline(
             points_m=[
-                (0.4, 2.0),
-                (1.5, 2.0),
-                (1.5, 3.0),
-                (2.5, 3.0),
-                (2.5, 1.0),
-                (3.4, 1.0),
+                (0.92, 0.66),
+                (1.45, 0.42),
+                (2.25, 0.48),
+                (2.95, 1.05),
+                (3.18, 1.75),
+                (3.18, 2.42),
+                (2.72, 2.88),
+                (1.65, 3.05),
+                (0.82, 2.58),
+                (0.58, 1.70),
+                (0.66, 0.98),
+                (0.92, 0.66),
             ],
             width_m=ROBOT_LINE_WIDTH_M,
         )
     )
-    # One obstacle on the upper leg.
-    arena.circle_obstacles.append(CircleObstacle(cx=2.0, cy=3.0, r=0.10))
-    # Red ball at the end of the path.
-    arena.add_ball(cx=3.55, cy=1.0, ball_radius_m=0.04)
-    arena.robot_start = (0.45, 2.0, 0.0)
+    arena.bases.extend(
+        [
+            BaseMarker(cx=0.68, cy=0.56, post_color_rgb=(30, 80, 215)),
+            BaseMarker(cx=0.62, cy=2.72, post_color_rgb=(210, 20, 25)),
+            BaseMarker(cx=3.45, cy=2.98, post_color_rgb=(50, 170, 55)),
+        ]
+    )
+    # One obstacle near the upper leg and a ball near the far base.
+    arena.circle_obstacles.append(CircleObstacle(cx=2.45, cy=2.78, r=0.10))
+    arena.add_ball(cx=3.45, cy=2.98, ball_radius_m=0.04)
+    # Start on the blue base just off the tape, facing the loop.
+    arena.robot_start = (0.72, 0.56, 0.22)
     config = SimConfig(
         seed=seed,
         slip_sigma_per_duty=0.0008,
