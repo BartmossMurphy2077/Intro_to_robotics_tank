@@ -18,7 +18,7 @@ def test_ir_code_changes_when_crossing_line():
     world.pose.y_m = 2.0
     world.pose.heading_rad = 0.0
 
-    assert world.read_ir_code() == 2
+    assert world.read_ir_code() == 7
 
     world.pose.y_m = 2.20
 

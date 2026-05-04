@@ -38,8 +38,10 @@ class SimConfig:
     dt_s: float = 0.02
     duty_to_mps: float = 0.00022
     wheel_base_m: float = 0.16
-    motor_tau_s: float = 0.08
-    motor_dead_zone_duty: int = 80
+    motor_tau_s: float = 0.14
+    motor_dead_zone_duty: int = 120
+    motor_left_scale: float = 0.94
+    motor_right_scale: float = 1.0
     slip_sigma_per_duty: float = 0.0  # set non-zero for noise scenarios
     heading_slip_sigma_rad: float = 0.0
     ultrasonic_noise_cm: float = 0.0

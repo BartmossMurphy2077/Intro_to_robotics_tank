@@ -13,11 +13,11 @@
   "_comment_line_command_map": "IR code -> [left_duty, right_duty]. Keep the normal map soft and forward-biased so the chassis does not pivot in place or chatter audibly when the IR code flips. Code 7 is centered for the Freenove V2 sensor behavior seen on the real robot.",
   "line_command_map": {
     "0": [700, 700],
-    "1": [760, 600],
+    "1": [820, 540],
     "2": [700, 700],
-    "3": [820, 540],
-    "4": [600, 760],
-    "6": [540, 820],
+    "3": [900, 500],
+    "4": [540, 820],
+    "6": [500, 900],
     "7": [700, 700]
   },
 

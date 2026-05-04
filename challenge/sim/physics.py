@@ -36,8 +36,8 @@ class RobotPhysics:
                 return 0.0
             return cmd * cfg.duty_to_mps
 
-        target_l = cmd_to_target(cmd_left_duty)
-        target_r = cmd_to_target(cmd_right_duty)
+        target_l = cmd_to_target(cmd_left_duty) * cfg.motor_left_scale
+        target_r = cmd_to_target(cmd_right_duty) * cfg.motor_right_scale
 
         tau = max(cfg.motor_tau_s, 1e-3)
         alpha = min(1.0, dt / tau)

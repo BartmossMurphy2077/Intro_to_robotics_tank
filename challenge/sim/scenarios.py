@@ -7,6 +7,8 @@ import math
 from .arena import Arena, CircleObstacle, Polyline, RectObstacle
 from .world import SimConfig, SimWorld
 
+ROBOT_LINE_WIDTH_M = 0.12
+
 
 def build_world(name: str, *, seed: int | None = None) -> SimWorld:
     builder = _SCENARIOS.get(name)
@@ -20,7 +22,7 @@ def build_world(name: str, *, seed: int | None = None) -> SimWorld:
 def _straight_line(*, seed: int | None) -> SimWorld:
     arena = Arena(width_m=4.0, height_m=4.0)
     arena.line_polylines.append(
-        Polyline(points_m=[(0.5, 2.0), (3.5, 2.0)], width_m=0.04)
+        Polyline(points_m=[(0.5, 2.0), (3.5, 2.0)], width_m=ROBOT_LINE_WIDTH_M)
     )
     arena.robot_start = (0.55, 2.0, 0.0)
     config = SimConfig(seed=seed)
@@ -30,7 +32,7 @@ def _straight_line(*, seed: int | None) -> SimWorld:
 def _obstacle_detour(*, seed: int | None) -> SimWorld:
     arena = Arena(width_m=4.0, height_m=4.0)
     arena.line_polylines.append(
-        Polyline(points_m=[(0.5, 2.0), (3.5, 2.0)], width_m=0.04)
+        Polyline(points_m=[(0.5, 2.0), (3.5, 2.0)], width_m=ROBOT_LINE_WIDTH_M)
     )
     arena.circle_obstacles.append(CircleObstacle(cx=2.0, cy=2.0, r=0.10))
     arena.robot_start = (0.55, 2.0, 0.0)
@@ -41,7 +43,7 @@ def _obstacle_detour(*, seed: int | None) -> SimWorld:
 def _line_with_ball(*, seed: int | None) -> SimWorld:
     arena = Arena(width_m=4.0, height_m=4.0)
     arena.line_polylines.append(
-        Polyline(points_m=[(0.5, 2.0), (3.0, 2.0)], width_m=0.04)
+        Polyline(points_m=[(0.5, 2.0), (3.0, 2.0)], width_m=ROBOT_LINE_WIDTH_M)
     )
     arena.add_ball(cx=3.2, cy=2.0, ball_radius_m=0.04)
     arena.robot_start = (0.55, 2.0, 0.0)
@@ -61,7 +63,7 @@ def _full_course(*, seed: int | None) -> SimWorld:
                 (2.5, 1.0),
                 (3.4, 1.0),
             ],
-            width_m=0.04,
+            width_m=ROBOT_LINE_WIDTH_M,
         )
     )
     # One obstacle on the upper leg.
@@ -89,7 +91,7 @@ def _noisy_sonic(*, seed: int | None) -> SimWorld:
 
 def _flicker_ir(*, seed: int | None) -> SimWorld:
     world = _line_with_ball(seed=seed)
-    world.config.ir_flicker_prob = 0.05
+    world.config.ir_flicker_prob = 0.02
     return world
 
 

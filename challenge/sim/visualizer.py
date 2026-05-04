@@ -13,6 +13,9 @@ if TYPE_CHECKING:
     from .world import SimWorld
 
 
+_MOVEMENT_BY_KEY: dict[int, str] = {}
+
+
 class PygameVisualizer:
     def __init__(self, world: "SimWorld", mission: "ChallengeMission") -> None:
         import pygame
@@ -22,10 +25,18 @@ class PygameVisualizer:
         self._quit = False
         self._speed = 1.0
         pygame.init()
+        global _MOVEMENT_BY_KEY
+        _MOVEMENT_BY_KEY = {
+            pygame.K_w: "w",
+            pygame.K_a: "a",
+            pygame.K_s: "s",
+            pygame.K_d: "d",
+        }
         self.screen = pygame.display.set_mode((960, 560))
         pygame.display.set_caption("Tank Simulator")
         self.font = pygame.font.Font(None, 22)
         self.small_font = pygame.font.Font(None, 18)
+        self._held_movement: str | None = None
         self.draw(mission)
 
     @property
@@ -42,16 +53,22 @@ class PygameVisualizer:
                 if event.key == pygame.K_ESCAPE:
                     self._quit = True
                 elif event.key == pygame.K_w:
+                    self._held_movement = "w"
                     commands.append("w")
                 elif event.key == pygame.K_a:
+                    self._held_movement = "a"
                     commands.append("a")
                 elif event.key == pygame.K_s:
+                    self._held_movement = "s"
                     commands.append("s")
                 elif event.key == pygame.K_d:
+                    self._held_movement = "d"
                     commands.append("d")
                 elif event.key == pygame.K_e:
+                    self._held_movement = None
                     commands.append("stop")
                 elif event.key == pygame.K_q:
+                    self._held_movement = None
                     commands.append("start")
                 elif event.key == pygame.K_i:
                     commands.append("i")
@@ -63,6 +80,12 @@ class PygameVisualizer:
                     self._speed = min(8.0, self._speed * 1.25)
                 elif event.key in (pygame.K_MINUS, pygame.K_UNDERSCORE):
                     self._speed = max(0.25, self._speed / 1.25)
+            elif event.type == pygame.KEYUP:
+                released = _MOVEMENT_BY_KEY.get(event.key)
+                if released is not None and released == self._held_movement:
+                    self._held_movement = None
+        if self._held_movement is not None:
+            commands.append(self._held_movement)
         return commands
 
     def draw(self, mission: "ChallengeMission") -> None:

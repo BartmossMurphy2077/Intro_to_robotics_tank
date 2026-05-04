@@ -97,16 +97,10 @@ class LineFollower(Behavior):
             self._search_step(ctx)
             return
 
-        # Debounce: wait for two consecutive line-visible reads before exiting
-        # a search/recovery sequence. A single noisy frame should not snap us
-        # back into bang-bang oscillation.
         if self._spiral_phase != 0:
-            self._reacquire_ticks += 1
-            if self._reacquire_ticks < 2:
-                # Hold the search motion one more tick.
-                self._search_step(ctx)
-                return
-            # Two clean ticks — exit search, fall through to normal follow.
+            # The controller already smooths IR reads. Once that smoothed code
+            # is visible, leave search immediately so we do not drive past the
+            # line at low speed while waiting for a second confirmatory tick.
             self._spiral_phase = 0
             self._last_line_recovery_ts = ctx.now()
 
@@ -217,12 +211,13 @@ class LineFollower(Behavior):
         phase = int(elapsed / phase_s) % 4
         turn = max(250, self.config.line_search_turn_speed)
         crawl = max(250, self.config.line_crawl_speed)
+        direction = self._last_line_dir if self._last_line_dir != 0 else -1
         if phase == 0:
-            target_l, target_r = -turn, turn
+            target_l, target_r = (-turn, turn) if direction < 0 else (turn, -turn)
         elif phase == 1:
             target_l, target_r = crawl, crawl
         elif phase == 2:
-            target_l, target_r = turn, -turn
+            target_l, target_r = (turn, -turn) if direction < 0 else (-turn, turn)
         else:
             target_l, target_r = crawl, crawl
         self._drive_target(ctx, target_l, target_r)
