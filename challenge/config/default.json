@@ -1,7 +1,7 @@
 {
   "_comment": "Operator-editable mission defaults. Loaded by main.py via --config (default path: this file). Override individual fields freely; unknown fields are ignored. To use the GA-tuned weights from outputs/ga/best_params.json instead, pass --use-ga (or --params PATH).",
 
-  "loop_sleep_s": 0.05,
+  "loop_sleep_s": 0.025,
 
   "obstacle_distance_cm": 18.0,
   "pickup_distance_cm": 15.0,
@@ -9,26 +9,26 @@
 
   "line_code_zero_is_center": false,
   "line_code_seven_is_center": true,
-  "line_crawl_speed": 380,
+  "line_crawl_speed": 300,
   "_comment_line_command_map": "IR code -> [left_duty, right_duty]. Keep the normal map soft and forward-biased so the chassis does not pivot in place or chatter audibly when the IR code flips. Code 7 is centered for the Freenove V2 sensor behavior seen on the real robot.",
   "line_command_map": {
-    "0": [1000, 1000],
-    "1": [1150, 750],
-    "2": [1000, 1000],
-    "3": [1250, 650],
-    "4": [750, 1150],
-    "6": [650, 1250],
-    "7": [1000, 1000]
+    "0": [700, 700],
+    "1": [760, 600],
+    "2": [700, 700],
+    "3": [820, 540],
+    "4": [600, 760],
+    "6": [540, 820],
+    "7": [700, 700]
   },
 
   "_comment_line_steer_limit": "Max change in either wheel duty per tick. Smooths bang-bang transitions so a single noisy IR flip cannot slam the chassis sideways in one tick. Keep it below the vendor turn swings but above crawl speed so the robot still recovers promptly.",
-  "line_max_wheel_delta": 900,
+  "line_max_wheel_delta": 450,
   "_comment_line_recovery": "If the line is not visible at startup, move forward briefly to put the IR bar over the tape. If the line is lost after it was seen, backtrack briefly before a bounded sweep.",
   "line_startup_probe_s": 0.55,
-  "line_startup_probe_speed": 450,
-  "line_backtrack_s": 0.35,
-  "line_backtrack_speed": 420,
-  "line_search_turn_speed": 380,
+  "line_startup_probe_speed": 360,
+  "line_backtrack_s": 0.25,
+  "line_backtrack_speed": 260,
+  "line_search_turn_speed": 260,
   "line_perpendicular_recovery_s": 0.5,
 
   "avoid_backup_speed": -1200,
