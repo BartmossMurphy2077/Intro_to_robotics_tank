@@ -7,7 +7,7 @@ style commands).
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable
 
 from ..mission import ChallengeMission, MissionConfig
 
@@ -17,7 +17,7 @@ HandlerResult = bool  # True = consumed, False = not handled
 
 
 HELP_TEXT = (
-    "commands: w a s d (manual drive)  space (pickup toggle)  auto (resume autonomy)  "
+    "commands: start  w a s d (manual drive)  space (pickup toggle)  auto (resume autonomy)  "
     "home (reset anchor)  status  help\n"
     "  set <param> <value>          (pickup-cm, obstacle-cm, line-crawl-speed)\n"
     "  get <param>\n"

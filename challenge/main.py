@@ -52,6 +52,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--loop-sleep", type=float, default=0.05)
     p.add_argument("--line-crawl-speed", type=int, default=260)
     p.add_argument("--ir-zero-lost", action="store_true")
+    p.add_argument(
+        "--invert-ir",
+        action="store_true",
+        help="force infrared bit inversion (use if line appears undetected on real robot)",
+    )
     p.add_argument("--calibrate", action="store_true",
                    help="print sensor and arm state without running the mission")
     p.add_argument("--calibrate-arm", action="store_true",
@@ -69,7 +74,12 @@ def apply_args(cfg: MissionConfig, args: argparse.Namespace) -> None:
     cfg.line_crawl_speed = max(120, args.line_crawl_speed)
     if args.ir_zero_lost:
         cfg.line_code_zero_is_center = False
-    cfg.use_vision = bool(args.use_vision)
+    # Keep camera scanning always enabled in mission runtime.
+    cfg.use_vision = True
+    cfg.vision_every_n_ticks = 1
+    if args.invert_ir:
+        cfg.ir_invert_bits = True
+        cfg.ir_auto_invert_bits = False
     if getattr(args, "params", None):
         from challenge.tuning import apply_params, load_params
 

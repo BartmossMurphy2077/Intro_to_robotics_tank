@@ -95,6 +95,8 @@ class ChallengeMission:
         self._watchdog_resets = 0
         self._state_switches = 0
         self._last_state_reason = "follow_line"
+        self._ir_inverted_runtime: bool = bool(self.config.ir_invert_bits)
+        self._ir_invert_votes: int = 0
 
     # ---------- public API ----------
 
@@ -198,6 +200,7 @@ class ChallengeMission:
             "line_lost_ticks": self._line_follower.line_lost_ticks,
             "false_seek_exits": self._seeker.false_seek_exits,
             "manual": int(self._manual_latched),
+            "ir_inverted": int(self._ir_inverted_runtime),
         }
 
     def start_manual_drive(self, key: str, duration_s: float | None = None) -> bool:
@@ -211,13 +214,16 @@ class ChallengeMission:
         still pass a timeout) but is otherwise ignored — manual is latched.
         """
         cfg = self.config
-        forward = cfg.manual_speed_forward
+        creep_left, creep_right = cfg.line_command_map.get(
+            2, (cfg.line_crawl_speed, cfg.line_crawl_speed)
+        )
         turn = cfg.manual_speed_turn
 
         if key == "w":
-            left, right = forward, forward
+            # Use the same pair as regular center-line creep.
+            left, right = int(creep_left), int(creep_right)
         elif key == "s":
-            left, right = -forward, -forward
+            left, right = int(-creep_left), int(-creep_right)
         elif key == "a":
             left, right = -turn, turn
         elif key == "d":
@@ -418,9 +424,24 @@ class ChallengeMission:
 
     def _read_ir(self) -> int:
         try:
-            code = int(self.car.infrared.read_all_infrared())
+            raw_code = int(self.car.infrared.read_all_infrared()) & 0b111
         except Exception:
             return 7
+
+        inverted_code = raw_code ^ 0b111
+        if self.config.ir_auto_invert_bits:
+            raw_useful = raw_code in (1, 2, 3, 4, 6)
+            inverted_useful = inverted_code in (1, 2, 3, 4, 6)
+            if inverted_useful and not raw_useful:
+                self._ir_invert_votes = min(24, self._ir_invert_votes + 1)
+            elif raw_useful and not inverted_useful:
+                self._ir_invert_votes = max(-24, self._ir_invert_votes - 1)
+            if self._ir_invert_votes >= 8:
+                self._ir_inverted_runtime = True
+            elif self._ir_invert_votes <= -8:
+                self._ir_inverted_runtime = False
+
+        code = inverted_code if self._ir_inverted_runtime else raw_code
         self._ir_history.append(code)
         window = max(1, self.config.ir_majority_window)
         self._ir_history = self._ir_history[-window:]

@@ -35,7 +35,9 @@ class MissionConfig:
     home_radius_m: float = 0.22
 
     # Line-follow behavior.
-    line_code_zero_is_center: bool = True
+    # On real hardware, code 0 usually means all sensors on bright floor
+    # (line lost), not centered on line.
+    line_code_zero_is_center: bool = False
     line_crawl_speed: int = 260
     line_command_map: Dict[int, Tuple[int, int]] = field(
         default_factory=lambda: dict(_VENDOR_LINE_MAP)
@@ -94,6 +96,13 @@ class MissionConfig:
     ir_majority_window: int = 3
     state_timeout_s: float = 8.0
     spiral_search_budget_s: float = 4.0
+
+    # Infrared robustness for real hardware:
+    # Some IR boards are electrically inverted vs simulator expectations.
+    # raw_code 2 (010) should usually mean center-on-line; if hardware returns
+    # the opposite polarity we can either force inversion or auto-learn it.
+    ir_invert_bits: bool = False
+    ir_auto_invert_bits: bool = True
 
     # Manual override behavior. While the user is driving with WASD we disable
     # autonomous logic. The mission stays "latched" in manual mode until the
