@@ -2,3 +2,6 @@ numpy>=1.26
 opencv-python>=4.8
 pygame>=2.5
 pytest>=7.4
+gpiozero>=2.0
+RPi.GPIO>=0.7.0
+pigpio>=1.78

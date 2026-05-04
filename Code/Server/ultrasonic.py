@@ -11,7 +11,12 @@ class gpiozero_ultrasonic:
             warnings.filterwarnings("ignore", category=PWMSoftwareFallback)  # Ignore PWM software fallback warnings
             self.trigger_pin = trigger_pin  # Set the trigger pin number
             self.echo_pin = echo_pin     # Set the echo pin number
-            self.sensor = DistanceSensor(echo=self.echo_pin, trigger=self.trigger_pin, max_distance=3)  # Initialize the distance sensor
+            try:
+                self.sensor = DistanceSensor(echo=self.echo_pin, trigger=self.trigger_pin, max_distance=3)  # Initialize the distance sensor
+            except Exception as e:
+                # If gpiozero fails (edge detection issues), fall back to lgpio_ultrasonic
+                print(f"gpiozero initialization failed: {e}, falling back to lgpio_ultrasonic")
+                raise RuntimeError("gpiozero edge detection not available, use lgpio instead")
         except ImportError:
             raise RuntimeError("gpiozero library not available")
 
@@ -100,10 +105,23 @@ class Ultrasonic:
         
         if self.pi_version == 2:  # Raspberry Pi 5
             print("Using lgpiod_ultrasonic")
-            self.sensor = lgpiod_ultrasonic(trigger_pin, echo_pin)
+            try:
+                self.sensor = lgpiod_ultrasonic(trigger_pin, echo_pin)
+            except Exception as e:
+                print(f"lgpiod_ultrasonic failed: {e}, falling back to gpiozero_ultrasonic")
+                self.sensor = gpiozero_ultrasonic(trigger_pin, echo_pin)
         else:  # Raspberry Pi 4 or earlier
             print("Using gpiozero_ultrasonic")
-            self.sensor = gpiozero_ultrasonic(trigger_pin, echo_pin)
+            try:
+                self.sensor = gpiozero_ultrasonic(trigger_pin, echo_pin)
+            except RuntimeError as e:
+                # If gpiozero fails, fall back to lgpio
+                print(f"gpiozero failed, falling back to lgpiod_ultrasonic: {e}")
+                try:
+                    self.sensor = lgpiod_ultrasonic(trigger_pin, echo_pin)
+                except Exception as lgpio_err:
+                    print(f"lgpiod also failed: {lgpio_err}")
+                    raise
 
     def get_distance(self):
         """Get the distance measurement from the ultrasonic sensor."""
