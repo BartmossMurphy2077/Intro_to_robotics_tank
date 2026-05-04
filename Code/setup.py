@@ -5,6 +5,22 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 
+def check_and_install(package, module_name=None):
+    """
+    Check for python import and install via pip if missing.
+    package: pip package name/spec
+    module_name: python import name (optional)
+    """
+    mod = module_name or str(package).split()[0]
+    try:
+        if module_available(mod):
+            print(f"{mod} is already installed.")
+            return True
+    except Exception:
+        pass
+    return pip_install(package)
+
+
 def module_available(module_name):
     try:
         __import__(module_name)
