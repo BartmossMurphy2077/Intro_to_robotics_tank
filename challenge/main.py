@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -58,6 +59,22 @@ def parse_args() -> argparse.Namespace:
                    help="move the carry arm pose during calibration")
     p.add_argument("--calibrate-seconds", type=float, default=8.0)
     p.add_argument("--calibrate-interval", type=float, default=0.75)
+    p.add_argument(
+        "--ascii-cam", action="store_true",
+        help="stream robot camera as ASCII art in this terminal while the mission runs",
+    )
+    p.add_argument(
+        "--ascii-cam-fps", type=int, default=10,
+        help="ASCII camera frame rate (default 10)",
+    )
+    p.add_argument(
+        "--ascii-no-color", action="store_true",
+        help="disable ANSI colour in the ASCII camera viewer",
+    )
+    p.add_argument(
+        "--vision-only", action="store_true",
+        help="vision pipeline only: seek→pickup→return home. No line follow, no obstacle avoidance.",
+    )
     return p.parse_args()
 
 
@@ -70,6 +87,12 @@ def apply_args(cfg: MissionConfig, args: argparse.Namespace) -> None:
     if args.ir_zero_lost:
         cfg.line_code_zero_is_center = False
     cfg.use_vision = bool(args.use_vision)
+    if getattr(args, "vision_only", False):
+        cfg.use_vision = True
+        cfg.vision_only = True
+        cfg.seek_lock_frames = 1        # commit after first detection
+        cfg.seek_max_s = 60.0           # generous seek timeout
+        cfg.seek_lost_frames = 6        # tolerate brief misses
     if getattr(args, "params", None):
         from challenge.tuning import apply_params, load_params
 
@@ -143,6 +166,11 @@ def main() -> None:
     mission = ChallengeMission(car=car, config=cfg)
     mission.reset_home_anchor()
 
+    if getattr(args, "vision_only", False):
+        from challenge.mission.state import MissionState
+        mission.state = MissionState.SEEK_BALL
+        print("[challenge] vision-only mode: seek→pickup→return home")
+
     if args.calibrate:
         try:
             _run_calibration(
@@ -167,6 +195,18 @@ def main() -> None:
             visualizer = None
 
     print(f"[challenge] mode={chosen_mode} scenario={args.scenario if chosen_mode == 'sim' else '-'}")
+
+    if args.ascii_cam:
+        from challenge.vision.ascii_view import run_loop
+        _t = threading.Thread(
+            target=run_loop,
+            kwargs={"get_frame": car.camera.get_frame_bgr,
+                    "fps": args.ascii_cam_fps,
+                    "color": not args.ascii_no_color},
+            daemon=True,
+            name="ascii-cam",
+        )
+        _t.start()
 
     run_mission(
         mission,

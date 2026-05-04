@@ -131,7 +131,7 @@ class ChallengeMission:
             self._seeker.step(self, distance, self._seeker.last_detection)
             return
 
-        if self._is_obstacle(distance):
+        if self._is_obstacle(distance) and not self.config.vision_only:
             self._remember_obstacle(distance)
             self._avoidance.start(self, resume_state=self.state)
             self._avoidance.step(self)
@@ -160,6 +160,11 @@ class ChallengeMission:
         if self._is_pickup_distance(distance):
             self.remember_ball_here()
             self.enter_state(MissionState.PICK_BALL, "pickup_range")
+            return
+
+        if self.config.vision_only:
+            # No line to follow — stop and wait for vision to re-acquire.
+            self.stop_drive()
             return
 
         self._line_follower.step(self)

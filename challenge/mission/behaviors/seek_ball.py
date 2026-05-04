@@ -179,8 +179,14 @@ class VisionSeeker(Behavior):
     def _abort(self, ctx: MissionContext, reason: str) -> None:
         self._false_seek_exits += 1
         self._lock_count = 0
-        self._cooldown_until_ts = ctx.now() + self.config.seek_failed_cooldown_s
-        ctx.enter_state(MissionState.FOLLOW_LINE, reason)
+        self._miss_count = 0
+        if self.config.vision_only:
+            # Stay in seek — stop and wait for ball to come back into view.
+            ctx.stop_drive()
+            ctx.enter_state(MissionState.SEEK_BALL, reason)
+        else:
+            self._cooldown_until_ts = ctx.now() + self.config.seek_failed_cooldown_s
+            ctx.enter_state(MissionState.FOLLOW_LINE, reason)
 
 
 __all__ = ["VisionSeeker"]

@@ -104,5 +104,8 @@ class MissionConfig:
     manual_speed_forward: int = 900
     manual_speed_turn: int = 850
 
+    # Vision-only mode: skip line following and obstacle avoidance entirely.
+    vision_only: bool = False
+
 
 __all__ = ["MissionConfig"]
