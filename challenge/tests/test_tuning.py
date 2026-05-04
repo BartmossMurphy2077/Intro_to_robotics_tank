@@ -2,6 +2,7 @@ from challenge.sim.runner import SimRunner
 from challenge.tuning import (
     _randomize_world,
     default_param_vector,
+    evaluate_one,
     evaluate_params,
     vector_to_params,
 )
@@ -29,6 +30,21 @@ def test_evaluate_params_smoke():
     assert results
     assert isinstance(score, float)
     assert results[0].scenario == "straight-line"
+
+
+def test_evaluate_one_reports_success_for_seeded_full_course():
+    params = vector_to_params(default_param_vector())
+
+    result = evaluate_one(
+        params,
+        scenario="full-course",
+        seed=1,
+        max_ticks=3000,
+        domain_randomization=False,
+    )
+
+    assert result.outcome == "success"
+    assert result.failure_reason == "ok"
 
 
 def test_domain_randomization_is_plausible_and_changes_setup():

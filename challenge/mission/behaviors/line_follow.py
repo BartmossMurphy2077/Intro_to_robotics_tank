@@ -128,6 +128,13 @@ class LineFollower(Behavior):
 
         target_l, target_r = self._pd_duty_for_ir(ir)
         left, right = self._apply_steer_limit(target_l, target_r)
+        # Real motors can ignore low duty around zero; when we have a forward
+        # target, enforce a minimum effective command so line tracking does not
+        # alternate between moving and stalling on successive ticks.
+        floor = max(0, int(self.config.line_min_forward_duty))
+        if floor > 0:
+            left = _enforce_target_floor(left, target_l, floor)
+            right = _enforce_target_floor(right, target_r, floor)
         if hasattr(ctx, "set_steer_target"):
             ctx.set_steer_target(target_l, target_r)
         ctx.drive(left, right)
@@ -285,6 +292,19 @@ def _line_error_for_ir(infrared_code: int, seven_is_center: bool = True) -> floa
     if infrared_code == 7 and not seven_is_center:
         return 0.0
     return _LINE_ERROR.get(infrared_code, 0.0)
+
+
+def _enforce_target_floor(output: int, target: int, floor: int) -> int:
+    floor = max(0, int(floor))
+    if floor <= 0:
+        return int(output)
+    output_i = int(output)
+    target_i = int(target)
+    if target_i > 0 and -floor < output_i < floor:
+        return floor
+    if target_i < 0 and -floor < output_i < floor:
+        return -floor
+    return output_i
 
 
 __all__ = ["LineFollower"]

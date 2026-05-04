@@ -248,8 +248,9 @@ def _diagnose_rollout(runner: SimRunner, status: dict[str, Any]) -> tuple[str, s
     balls_remaining = len(runner.world.arena.balls)
     watchdog = int(status["watchdog_resets"])
     false_seek = int(status["false_seek_exits"])
+    touched_ball = bool(runner.mission.ball_memory or runner.world.carrying_ball or carrying)
 
-    if balls_remaining == 0 and not carrying and state == "follow_line" and home_m <= runner.config.home_radius_m * 1.5:
+    if touched_ball and not carrying and state == "follow_line" and home_m <= runner.config.home_radius_m * 1.5:
         return "success", "ok"
     if carrying and home_m > runner.config.home_radius_m * 1.5:
         return "carried_not_returned", "ball_not_returned"

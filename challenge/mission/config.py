@@ -47,13 +47,13 @@ class MissionConfig:
     # threshold/polarity. Treat it as centered by default for the real chassis;
     # operators can disable this if their board reports 111 off-line.
     line_code_seven_is_center: bool = True
-    line_crawl_speed: int = 420
-    line_base_speed: int = 820
+    line_crawl_speed: int = 650
+    line_base_speed: int = 980
     line_pd_kp: float = 145.0
     line_pd_kd: float = 60.0
     line_max_turn: int = 420
     line_turn_slowdown: float = 0.18
-    line_min_forward_duty: int = 450
+    line_min_forward_duty: int = 700
     line_command_map: Dict[int, Tuple[int, int]] = field(
         default_factory=lambda: dict(_DEFAULT_LINE_MAP)
     )
@@ -65,10 +65,10 @@ class MissionConfig:
     # bar over the tape before sweeping. Once we have seen the line, a later
     # loss first backs out of the last command, then sweeps slowly.
     line_startup_probe_s: float = 0.55
-    line_startup_probe_speed: int = 500
+    line_startup_probe_speed: int = 700
     line_backtrack_s: float = 0.35
-    line_backtrack_speed: int = 450
-    line_search_turn_speed: int = 450
+    line_backtrack_speed: int = 650
+    line_search_turn_speed: int = 650
     line_perpendicular_recovery_s: float = 0.5
 
     # Obstacle avoidance motion profile.
@@ -137,7 +137,9 @@ class MissionConfig:
     line_recovery_cooldown_s: float = 1.0
 
     # Robustness.
-    sonic_median_window: int = 3
+    # Use a slightly wider median filter to suppress one-off ultrasonic spikes
+    # that can trigger unnecessary obstacle-avoidance detours.
+    sonic_median_window: int = 7
     ir_majority_window: int = 3
     state_timeout_s: float = 8.0
     spiral_search_budget_s: float = 4.0
