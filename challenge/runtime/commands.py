@@ -17,7 +17,7 @@ HandlerResult = bool  # True = consumed, False = not handled
 
 
 HELP_TEXT = (
-    "commands: start  w a s d (manual drive)  space (pickup toggle)  auto (resume autonomy)  "
+    "commands: start  w a s d (manual drive)  e/stop (hard stop)  space (pickup toggle)  auto (resume autonomy)  "
     "home (reset anchor)  status  help\n"
     "  set <param> <value>          (pickup-cm, obstacle-cm, line-crawl-speed)\n"
     "  get <param>\n"
@@ -42,6 +42,9 @@ def handle_command(
 
     if command in (" ", "space"):
         mission.manual_pickup_toggle()
+        return True
+    if command in ("e", "stop"):
+        mission.stop_drive()
         return True
 
     handler = _COMMAND_HANDLERS.get(command)

@@ -94,7 +94,7 @@ def format_startup_banner(cfg: MissionConfig) -> str:
         f"[challenge] obstacle_cm={cfg.obstacle_distance_cm:.1f} "
         f"pickup_cm={cfg.pickup_distance_cm:.1f} home_radius_m={cfg.home_radius_m:.2f} "
         f"vision={cfg.use_vision}\n"
-        "[challenge] commands: start  WASD drive (latches manual)  space pickup  "
+        "[challenge] commands: start  WASD drive (latches manual)  E stop  space pickup  "
         "auto resume  stop/pause  home/status/help + Enter"
     )
 

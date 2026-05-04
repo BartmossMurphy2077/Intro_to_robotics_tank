@@ -63,6 +63,9 @@ class MissionConfig:
     carry_servo0_angle: int = 150
     carry_servo1_angle: int = 140
     carry_pose_settle_s: float = 0.15
+    # Vendor `mode_clamp_down` sweep starts servo0 from 130->90. Pre-position
+    # there before drop on real hardware to ensure full down travel.
+    drop_prep_servo0_angle: int = 130
 
     # Dead-reckoning return-to-start.
     duty_to_mps: float = 0.00022

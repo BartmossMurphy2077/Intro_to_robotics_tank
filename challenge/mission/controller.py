@@ -23,7 +23,7 @@ from __future__ import annotations
 import math
 import time
 from statistics import median
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from .behaviors import (
     BallPickup,
@@ -97,6 +97,8 @@ class ChallengeMission:
         self._last_state_reason = "follow_line"
         self._ir_inverted_runtime: bool = bool(self.config.ir_invert_bits)
         self._ir_invert_votes: int = 0
+        self._ir_last_raw: int = 7
+        self._ir_last_used: int = 7
 
     # ---------- public API ----------
 
@@ -201,6 +203,9 @@ class ChallengeMission:
             "false_seek_exits": self._seeker.false_seek_exits,
             "manual": int(self._manual_latched),
             "ir_inverted": int(self._ir_inverted_runtime),
+            "ir_raw": self._ir_last_raw,
+            "ir_used": self._ir_last_used,
+            "line_seen": int(not self._line_follower.is_line_lost(self._ir_last_used)),
         }
 
     def start_manual_drive(self, key: str, duration_s: float | None = None) -> bool:
@@ -442,6 +447,8 @@ class ChallengeMission:
                 self._ir_inverted_runtime = False
 
         code = inverted_code if self._ir_inverted_runtime else raw_code
+        self._ir_last_raw = raw_code
+        self._ir_last_used = code
         self._ir_history.append(code)
         window = max(1, self.config.ir_majority_window)
         self._ir_history = self._ir_history[-window:]
