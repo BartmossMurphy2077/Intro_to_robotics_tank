@@ -273,7 +273,7 @@ class ChallengeMission:
             "ir_inverted": int(self._ir_inverted_runtime),
             "ir_raw": self._ir_last_raw,
             "ir_used": self._ir_last_used,
-            "line_seen": int(not self._line_follower.is_line_lost(self._ir_last_used)),
+            "line_seen": int(not self._line_follower.is_line_lost(self._ir_smoothed_code)),
         }
 
     def start_manual_drive(self, key: str, duration_s: float | None = None) -> bool:
@@ -625,6 +625,8 @@ class ChallengeMission:
         for item in self._ir_history:
             counts[item] = counts.get(item, 0) + 1
         smoothed = max(counts.items(), key=lambda item: (item[1], item[0] == code))[0]
+        if self._line_follower.is_line_lost(smoothed) and not self._line_follower.is_line_lost(code):
+            smoothed = code
         self._ir_smoothed_code = int(smoothed)
 
         if self._ir_debug_log and smoothed != self._ir_debug_last_logged:

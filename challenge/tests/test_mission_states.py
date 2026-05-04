@@ -26,6 +26,18 @@ def test_ir_majority_ignores_single_tick_flicker():
         runner.close()
 
 
+def test_ir_majority_reacquires_current_visible_line():
+    cfg = MissionConfig(ir_majority_window=3)
+    runner = SimRunner("straight-line", seed=1, config=cfg)
+    try:
+        runner.mission._ir_history = [0, 0]
+        runner.mission.car.infrared.read_all_infrared = lambda: 3  # type: ignore[method-assign]
+
+        assert runner.mission._read_ir() == 3
+    finally:
+        runner.close()
+
+
 def test_line_lost_uses_search_before_crawl_fallback():
     cfg = MissionConfig(
         spiral_search_budget_s=2.0,

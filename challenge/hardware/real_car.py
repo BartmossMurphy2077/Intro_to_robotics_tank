@@ -126,10 +126,30 @@ class RealCar:
             if self.camera is not None:
                 self.camera.close()
         finally:
+            self._close_vendor_components()
+
+    def _close_vendor_components(self) -> None:
+        car = self._car
+        try:
+            if getattr(car, "servo", None) is not None:
+                car.servo.setServoStop()
+        except Exception as exc:
+            print(f"[real_car] servo cleanup warning: {exc}")
+
+        # Close gpiozero-backed devices before the ultrasonic RPi.GPIO cleanup;
+        # otherwise LineSensor/Motor background cleanup can trip over GPIO mode.
+        for name in ("infrared", "motor", "sonic"):
+            component = getattr(car, name, None)
+            if component is None:
+                continue
             try:
-                self._car.close()
+                component.close()
             except Exception as exc:
-                print(f"[real_car] cleanup warning: {exc}")
+                print(f"[real_car] {name} cleanup warning: {exc}")
+            finally:
+                setattr(car, name, None)
+        car.servo = None
+        car.clamp_mode = 0
 
 
 class _NullCamera:
