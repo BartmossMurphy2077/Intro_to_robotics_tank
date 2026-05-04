@@ -24,6 +24,7 @@ Schema (one row per drive call):
     target_r      same, right wheel
     drive_l       wheel duty actually sent to the motor (post-slew-limit)
     drive_r       same, right wheel
+    duty_gap      abs(drive_l - drive_r); bigger gaps mean sharper turns
     x, y          dead-reckoned pose (m)
     heading_deg   pose heading
     line_lost     consecutive ticks the IR has not seen the line
@@ -58,6 +59,7 @@ _FIELDS: tuple[str, ...] = (
     "target_r",
     "drive_l",
     "drive_r",
+    "duty_gap",
     "x",
     "y",
     "heading_deg",
@@ -109,6 +111,7 @@ class MotorTelemetry:
             "target_r": snapshot.get("target_r", ""),
             "drive_l": snapshot.get("drive_l", ""),
             "drive_r": snapshot.get("drive_r", ""),
+            "duty_gap": snapshot.get("duty_gap", ""),
             "x": _round(snapshot.get("x"), 3),
             "y": _round(snapshot.get("y"), 3),
             "heading_deg": _round(snapshot.get("heading_deg"), 1),

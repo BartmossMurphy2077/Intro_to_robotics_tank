@@ -30,9 +30,9 @@ def test_default_config_loads_and_applies() -> None:
     for code in (1, 2, 3, 4, 6):
         left, right = cfg.line_command_map[code]
         assert left >= 0 and right >= 0, f"code {code}: ({left}, {right}) has reverse component"
-        assert left + right >= 800, f"code {code}: not enough forward bias"
+        assert left + right >= 1600, f"code {code}: not enough forward bias"
     # New tunables are present.
-    assert cfg.line_max_wheel_delta >= 1100
+    assert cfg.line_max_wheel_delta >= 900
     assert cfg.carry_obstacle_grace_s == 1.5
     assert cfg.carry_min_obstacle_cm == 12.0
 

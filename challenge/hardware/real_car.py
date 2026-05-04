@@ -19,6 +19,24 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SERVER_DIR = _REPO_ROOT / "Code" / "Server"
 
 
+def _configure_gpio_mode() -> None:
+    try:
+        import RPi.GPIO as GPIO  # type: ignore[import-not-found]
+
+        try:
+            GPIO.setwarnings(False)
+        except Exception:
+            pass
+        try:
+            GPIO.setmode(GPIO.BCM)
+        except Exception:
+            pass
+    except Exception:
+        # Some Pi images use lgpio or another backend; leaving the mode alone is
+        # better than failing hardware init for a best-effort cleanup fix.
+        pass
+
+
 def _load_vendor_car_class():
     if str(_REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(_REPO_ROOT))
@@ -70,6 +88,7 @@ class RealCar:
     """Real-hardware backend. Only constructible on a Raspberry Pi."""
 
     def __init__(self) -> None:
+        _configure_gpio_mode()
         Car = _load_vendor_car_class()
         self._car = Car()
 
@@ -107,7 +126,10 @@ class RealCar:
             if self.camera is not None:
                 self.camera.close()
         finally:
-            self._car.close()
+            try:
+                self._car.close()
+            except Exception as exc:
+                print(f"[real_car] cleanup warning: {exc}")
 
 
 class _NullCamera:

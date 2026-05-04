@@ -11,14 +11,16 @@ from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
 
-# Mirrors `Code/Server/car.py:mode_infrared` exactly (left, right) duty pairs.
-_VENDOR_LINE_MAP: Dict[int, Tuple[int, int]] = {
-    2: (1200, 1200),    # center on line: forward
-    4: (-1500, 2500),   # left sensor only: gentle left
-    6: (-2000, 4000),   # left+center: hard left
-    1: (2500, -1500),   # right sensor only: gentle right
-    3: (4000, -2000),   # right+center: hard right
-    0: (1200, 1200),    # all-bright: treat as center (matches vendor)
+# Softer line map for normal operation. It keeps both wheels moving forward on
+# every line-visible code, which is much less twitchy on the real chassis than
+# the vendor's pivot-heavy mapping.
+_DEFAULT_LINE_MAP: Dict[int, Tuple[int, int]] = {
+    2: (1000, 1000),    # center on line: straight forward
+    4: (750, 1150),     # left sensor only: small left bias
+    6: (650, 1250),     # left+center: stronger left bias
+    1: (1150, 750),     # right sensor only: small right bias
+    3: (1250, 650),     # right+center: stronger right bias
+    0: (1000, 1000),    # all-bright: keep rolling forward slowly
 }
 
 
@@ -41,14 +43,14 @@ class MissionConfig:
     # On real hardware, code 0 usually means all sensors on bright floor
     # (line lost), not centered on line.
     line_code_zero_is_center: bool = False
-    line_crawl_speed: int = 260
+    line_crawl_speed: int = 220
     line_command_map: Dict[int, Tuple[int, int]] = field(
-        default_factory=lambda: dict(_VENDOR_LINE_MAP)
+        default_factory=lambda: dict(_DEFAULT_LINE_MAP)
     )
-    # Per-tick wheel-duty change cap. Vendor map can swing 8000 units between
-    # adjacent codes, which rotates the chassis perpendicular in one tick.
-    # Clamping the delta gives the line follower a poor-man's slew limiter.
-    line_max_wheel_delta: int = 1500
+    # Per-tick wheel-duty change cap. Keeps a line code flip from slamming the
+    # chassis sideways in one tick, which is the main source of noisy wheel
+    # chatter on the real robot.
+    line_max_wheel_delta: int = 900
     # When the spiral search budget expires we fall back to a slow rotate-in-
     # place toward the last-seen line direction for at most this long, before
     # giving up and crawling forward.

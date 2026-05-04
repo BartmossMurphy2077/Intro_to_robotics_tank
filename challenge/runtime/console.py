@@ -186,8 +186,12 @@ def format_hud_line(status: dict, operator_auto: bool = False) -> str:
     tune_s = f" tune={tuned}" if tuned else ""
     return (
         f"[{mode}] {status['state']:<14} "
+        f"reason={status.get('state_reason', '-'):<14.14} "
+        f"age={status.get('state_age_s', 0.0):4.1f}s "
         f"L/R={status.get('duty_l', 0)}/{status.get('duty_r', 0)} "
+        f"gap={status.get('duty_gap', 0):4d} "
         f"ir={ir_used:03b} raw={ir_raw:03b} inv={ir_inv} line={line_seen} "
+        f"lost={status.get('line_lost_ticks', 0):3d} "
         f"pose x={status['x_m']:.2f} y={status['y_m']:.2f} "
         f"dist={status['distance_cm']:5.1f}cm "
         f"carry={status['carrying']} home={status['home_m']:.2f}m"

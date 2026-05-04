@@ -8,19 +8,19 @@
   "home_radius_m": 0.22,
 
   "line_code_zero_is_center": false,
-  "line_crawl_speed": 260,
-  "_comment_line_command_map": "IR code -> [left_duty, right_duty]. Vendor map used +/-4000 for hard turns and that overcorrects on the real chassis (one-tick 60-90deg rotation). Tunings here are conservative: every code keeps both wheels at >=400 forward duty so the chassis always advances along the line and never pivots in place mid-track. Tweak here without touching code.",
+  "line_crawl_speed": 220,
+  "_comment_line_command_map": "IR code -> [left_duty, right_duty]. Keep the normal map soft and forward-biased so the chassis does not pivot in place or chatter audibly when the IR code flips. Tweak here without touching code.",
   "line_command_map": {
-    "0": [1100, 1100],
-    "1": [1300, 600],
-    "2": [1100, 1100],
-    "3": [1500, 400],
-    "4": [600, 1300],
-    "6": [400, 1500]
+    "0": [1000, 1000],
+    "1": [1150, 750],
+    "2": [1000, 1000],
+    "3": [1250, 650],
+    "4": [750, 1150],
+    "6": [650, 1250]
   },
 
-  "_comment_line_steer_limit": "Max change in either wheel duty per tick. Smooths bang-bang transitions so a single noisy IR flip cannot slam the chassis perpendicular to the line. Set above the line crawl speed so the first tick after a stop snaps to the centered (1100, 1100) command immediately.",
-  "line_max_wheel_delta": 1200,
+  "_comment_line_steer_limit": "Max change in either wheel duty per tick. Smooths bang-bang transitions so a single noisy IR flip cannot slam the chassis sideways in one tick. Keep it below the vendor turn swings but above crawl speed so the robot still recovers promptly.",
+  "line_max_wheel_delta": 900,
   "line_perpendicular_recovery_s": 0.6,
 
   "avoid_backup_speed": -1200,
