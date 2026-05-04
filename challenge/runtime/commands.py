@@ -44,6 +44,21 @@ def handle_command(
         mission.start_manual_drive(command)
         return True
 
+    if command.startswith("manual-axis "):
+        if operator_auto:
+            emit_line("[challenge] manual drive only in MANUAL (press Q)")
+            return True
+        parts = command.split()
+        if len(parts) != 3:
+            return True
+        try:
+            forward_axis = int(parts[1])
+            turn_axis = int(parts[2])
+        except ValueError:
+            return True
+        mission.start_manual_vector(forward_axis, turn_axis)
+        return True
+
     if command in (" ", "space"):
         mission.manual_pickup_toggle()
         return True

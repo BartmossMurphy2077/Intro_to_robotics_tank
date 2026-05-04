@@ -36,7 +36,7 @@ class PygameVisualizer:
         pygame.display.set_caption("Tank Simulator")
         self.font = pygame.font.Font(None, 22)
         self.small_font = pygame.font.Font(None, 18)
-        self._held_movement: str | None = None
+        self._held_movement: set[str] = set()
         self.draw(mission)
 
     @property
@@ -53,22 +53,18 @@ class PygameVisualizer:
                 if event.key == pygame.K_ESCAPE:
                     self._quit = True
                 elif event.key == pygame.K_w:
-                    self._held_movement = "w"
-                    commands.append("w")
+                    self._held_movement.add("w")
                 elif event.key == pygame.K_a:
-                    self._held_movement = "a"
-                    commands.append("a")
+                    self._held_movement.add("a")
                 elif event.key == pygame.K_s:
-                    self._held_movement = "s"
-                    commands.append("s")
+                    self._held_movement.add("s")
                 elif event.key == pygame.K_d:
-                    self._held_movement = "d"
-                    commands.append("d")
+                    self._held_movement.add("d")
                 elif event.key == pygame.K_e:
-                    self._held_movement = None
+                    self._held_movement.clear()
                     commands.append("stop")
                 elif event.key == pygame.K_q:
-                    self._held_movement = None
+                    self._held_movement.clear()
                     commands.append("start")
                 elif event.key == pygame.K_i:
                     commands.append("i")
@@ -82,10 +78,12 @@ class PygameVisualizer:
                     self._speed = max(0.25, self._speed / 1.25)
             elif event.type == pygame.KEYUP:
                 released = _MOVEMENT_BY_KEY.get(event.key)
-                if released is not None and released == self._held_movement:
-                    self._held_movement = None
-        if self._held_movement is not None:
-            commands.append(self._held_movement)
+                if released is not None:
+                    self._held_movement.discard(released)
+        if self._held_movement:
+            forward_axis = int("w" in self._held_movement) - int("s" in self._held_movement)
+            turn_axis = int("d" in self._held_movement) - int("a" in self._held_movement)
+            commands.append(f"manual-axis {forward_axis} {turn_axis}")
         return commands
 
     def draw(self, mission: "ChallengeMission") -> None:

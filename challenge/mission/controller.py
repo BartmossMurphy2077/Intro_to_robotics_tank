@@ -289,25 +289,42 @@ class ChallengeMission:
         """
         if self._operator_auto:
             return False
-        cfg = self.config
-        forward = cfg.manual_speed_forward
-        turn = cfg.manual_speed_turn
 
         if key == "w":
-            left, right = forward, forward
+            return self.start_manual_vector(1, 0)
         elif key == "s":
-            left, right = -forward, -forward
+            return self.start_manual_vector(-1, 0)
         elif key == "a":
-            # Rotate left in place: left tread reverses, right tread forward.
-            left, right = -turn, turn
+            return self.start_manual_vector(0, -1)
         elif key == "d":
-            # Rotate right in place: left tread forward, right tread reverses.
-            left, right = turn, -turn
-        else:
-            return False
+            return self.start_manual_vector(0, 1)
+        return False
 
-        self._manual_latched = True
+    def start_manual_vector(self, forward_axis: int, turn_axis: int) -> bool:
+        """Manual arcade drive: forward/backward plus steering can be stacked."""
+        if self._operator_auto:
+            return False
+        forward_axis = max(-1, min(1, int(forward_axis)))
+        turn_axis = max(-1, min(1, int(turn_axis)))
+        if forward_axis == 0 and turn_axis == 0:
+            self.stop_drive_latched()
+            return True
+
+        cfg = self.config
+        forward = forward_axis * cfg.manual_speed_forward
+        if forward_axis == 0:
+            turn = turn_axis * cfg.manual_speed_turn
+        else:
+            # Curved driving should steer without snapping into an in-place
+            # pivot. Full pivot remains available with A/D alone.
+            turn = int(turn_axis * min(cfg.manual_speed_turn, cfg.manual_speed_forward * 0.55))
+
+        left = forward + turn
+        right = forward - turn
+        left = max(-4095, min(4095, int(left)))
+        right = max(-4095, min(4095, int(right)))
         self._manual_until_ts = self._now() + max(0.05, cfg.manual_dwell_s)
+        self._manual_latched = True
         self._last_manual_cmd = (left, right)
         self.drive(left, right)
         return True

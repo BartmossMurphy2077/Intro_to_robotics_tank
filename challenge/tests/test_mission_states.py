@@ -58,6 +58,35 @@ def test_line_lost_uses_search_before_crawl_fallback():
         runner.close()
 
 
+def test_manual_vector_combines_forward_and_turn():
+    cfg = MissionConfig(manual_speed_forward=900, manual_speed_turn=1100)
+    runner = SimRunner("straight-line", seed=1, config=cfg)
+    try:
+        runner.mission.enter_manual_idle_at_start()
+
+        assert runner.mission.start_manual_vector(1, -1)
+
+        # Forward-left is a curve, not an abrupt in-place pivot.
+        assert runner.world.cmd_left_duty > 0
+        assert runner.world.cmd_right_duty > runner.world.cmd_left_duty
+    finally:
+        runner.close()
+
+
+def test_manual_vector_pivots_when_turning_without_forward():
+    cfg = MissionConfig(manual_speed_forward=900, manual_speed_turn=1100)
+    runner = SimRunner("straight-line", seed=1, config=cfg)
+    try:
+        runner.mission.enter_manual_idle_at_start()
+
+        assert runner.mission.start_manual_vector(0, -1)
+
+        assert runner.world.cmd_left_duty == -1100
+        assert runner.world.cmd_right_duty == 1100
+    finally:
+        runner.close()
+
+
 def test_watchdog_resets_stuck_seek_state():
     cfg = MissionConfig(state_timeout_s=0.01)
     runner = SimRunner("line-with-ball", seed=1, config=cfg)

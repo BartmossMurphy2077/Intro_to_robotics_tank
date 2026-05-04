@@ -10,3 +10,4 @@ params.json
 challenge/sim/_recordings/
 outputs/ga/
 .zed
+/outputs/telemetry/
