@@ -28,18 +28,29 @@ def run_mission(
     sim_world: Any = None,
     visualizer: Any = None,
     status_interval_s: float = 1.0,
+    auto_start: bool = False,
+    max_seconds: float | None = None,
 ) -> None:
     console = RuntimeConsole()
     last_status = 0.0
+    started_at = time.monotonic()
 
     mission.set_ir_debug(cfg.ir_debug_log, emit=console.print_info_line)
-    mission.enter_manual_idle_at_start()
+    if auto_start:
+        # Skip the manual-idle handshake — useful for headless SSH runs where
+        # there is no terminal to press Q.
+        mission.resume_autonomous()
+    else:
+        mission.enter_manual_idle_at_start()
 
     print(format_startup_banner(cfg))
-    console.print_info_line(
-        "[challenge] MANUAL — Q=enter AUTO (tuned params)  "
-        "Q again=MANUAL  E=stop  WASD=drive"
-    )
+    if auto_start:
+        console.print_info_line("[challenge] AUTO (started via --auto-start)")
+    else:
+        console.print_info_line(
+            "[challenge] MANUAL — Q=enter AUTO (tuned params)  "
+            "Q again=MANUAL  E=stop  WASD=drive"
+        )
 
     try:
         console.start()
@@ -118,12 +129,25 @@ def run_mission(
                 last_status = now
 
             time.sleep(cfg.loop_sleep_s)
+
+            if max_seconds is not None and (time.monotonic() - started_at) >= max_seconds:
+                console.print_info_line(
+                    f"[challenge] max-seconds reached ({max_seconds:.1f}s), stopping"
+                )
+                mission.stop_drive()
+                break
     except KeyboardInterrupt:
         console.print_info_line("[challenge] stopping")
     finally:
         console.stop()
         if visualizer is not None:
             visualizer.close()
+        telemetry = getattr(mission, "_telemetry", None)
+        if telemetry is not None:
+            try:
+                telemetry.close()
+            except Exception:
+                pass
         mission.car.close()
 
 

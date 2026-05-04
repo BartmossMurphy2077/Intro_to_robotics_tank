@@ -116,8 +116,10 @@ class LineFollower(Behavior):
         except Exception:
             pass
 
-        left, right = self._duty_for_ir(ir)
-        left, right = self._apply_steer_limit(left, right)
+        target_l, target_r = self._duty_for_ir(ir)
+        left, right = self._apply_steer_limit(target_l, target_r)
+        if hasattr(ctx, "set_steer_target"):
+            ctx.set_steer_target(target_l, target_r)
         ctx.drive(left, right)
         self._prev_left, self._prev_right = left, right
 
@@ -165,6 +167,8 @@ class LineFollower(Behavior):
             self._last_line_recovery_ts = now
             duty = self.config.line_crawl_speed
             left, right = self._apply_steer_limit(duty, duty)
+            if hasattr(ctx, "set_steer_target"):
+                ctx.set_steer_target(duty, duty)
             ctx.drive(left, right)
             self._prev_left, self._prev_right = left, right
             return
@@ -177,10 +181,12 @@ class LineFollower(Behavior):
             duty = max(300, self.config.line_crawl_speed)
             direction = self._last_line_dir if self._last_line_dir != 0 else -1
             if direction < 0:
-                left, right = -duty, duty
+                target_l, target_r = -duty, duty
             else:
-                left, right = duty, -duty
-            left, right = self._apply_steer_limit(left, right)
+                target_l, target_r = duty, -duty
+            left, right = self._apply_steer_limit(target_l, target_r)
+            if hasattr(ctx, "set_steer_target"):
+                ctx.set_steer_target(target_l, target_r)
             ctx.drive(left, right)
             self._prev_left, self._prev_right = left, right
             return
@@ -190,14 +196,16 @@ class LineFollower(Behavior):
         phase = int(elapsed / phase_s) % 4
         duty = max(300, self.config.line_crawl_speed)
         if phase == 0:
-            left, right = -duty, duty
+            target_l, target_r = -duty, duty
         elif phase == 1:
-            left, right = duty, duty
+            target_l, target_r = duty, duty
         elif phase == 2:
-            left, right = duty, -duty
+            target_l, target_r = duty, -duty
         else:
-            left, right = duty, duty
-        left, right = self._apply_steer_limit(left, right)
+            target_l, target_r = duty, duty
+        left, right = self._apply_steer_limit(target_l, target_r)
+        if hasattr(ctx, "set_steer_target"):
+            ctx.set_steer_target(target_l, target_r)
         ctx.drive(left, right)
         self._prev_left, self._prev_right = left, right
 

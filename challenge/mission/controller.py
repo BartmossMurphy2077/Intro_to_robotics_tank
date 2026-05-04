@@ -59,10 +59,18 @@ class ChallengeMission:
         config: MissionConfig,
         *,
         clock: Callable[[], float] | None = None,
+        telemetry: object | None = None,
     ) -> None:
         self.car = car
         self.config = config
         self._clock = clock
+        # Optional MotorTelemetry sink; None = no logging (default for tests).
+        self._telemetry = telemetry
+        # Last "intended" wheel command before any slew limiter clipped it. The
+        # line follower stamps this before calling drive() so the telemetry can
+        # show target-vs-actual divergence.
+        self._last_target_l: int = 0
+        self._last_target_r: int = 0
 
         self.state = MissionState.FOLLOW_LINE
         self._carrying_ball = False
@@ -379,9 +387,46 @@ class ChallengeMission:
         self._sleep(seconds)
 
     def drive(self, left: int, right: int) -> None:
-        self.car.motor.setMotorModel(int(left), int(right))
-        self._cmd_left = int(left)
-        self._cmd_right = int(right)
+        left_i, right_i = int(left), int(right)
+        self.car.motor.setMotorModel(left_i, right_i)
+        self._cmd_left = left_i
+        self._cmd_right = right_i
+        if self._telemetry is not None:
+            self._telemetry.log("drive", self._telemetry_snapshot(left_i, right_i))
+
+    def set_steer_target(self, left: int, right: int) -> None:
+        """Record the line follower's intended duty before slew-limiting.
+
+        Called by behaviors that apply their own clipping so the telemetry can
+        show target-vs-actual divergence (i.e. how often the slew limiter is
+        actively clipping forward acceleration).
+        """
+        self._last_target_l = int(left)
+        self._last_target_r = int(right)
+
+    def _telemetry_snapshot(self, drive_l: int, drive_r: int) -> dict[str, Any]:
+        target_l = self._last_target_l if self._last_target_l != 0 else drive_l
+        target_r = self._last_target_r if self._last_target_r != 0 else drive_r
+        return {
+            "ts": self._now(),
+            "state": self.state.value,
+            "state_age_s": max(0.0, self._now() - self._state_entry_ts),
+            "reason": self._last_state_reason,
+            "operator": "auto" if self._operator_auto else "manual",
+            "ir_raw": self._ir_last_raw,
+            "ir_used": self._ir_last_used,
+            "ir_inverted": int(self._ir_inverted_runtime),
+            "dist_cm": self._sonic_history[-1] if self._sonic_history else -1.0,
+            "carrying": int(self._carrying_ball),
+            "target_l": target_l,
+            "target_r": target_r,
+            "drive_l": drive_l,
+            "drive_r": drive_r,
+            "x": self.pose.x_m,
+            "y": self.pose.y_m,
+            "heading_deg": math.degrees(self.pose.heading_rad),
+            "line_lost": self._line_follower.line_lost_ticks,
+        }
 
     def stop_drive(self) -> None:
         self.drive(0, 0)

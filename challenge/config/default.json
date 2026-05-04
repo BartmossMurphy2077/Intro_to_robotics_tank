@@ -9,18 +9,18 @@
 
   "line_code_zero_is_center": false,
   "line_crawl_speed": 260,
-  "_comment_line_command_map": "IR code -> [left_duty, right_duty]. Vendor map used +/-4000 for hard turns; that overcorrects on the real chassis (one-tick 60-90deg rotation), so we cap at +/-1800 and zero the inner wheel for the gentle codes. Tweak here without touching code.",
+  "_comment_line_command_map": "IR code -> [left_duty, right_duty]. Vendor map used +/-4000 for hard turns and that overcorrects on the real chassis (one-tick 60-90deg rotation). Tunings here are conservative: every code keeps both wheels at >=400 forward duty so the chassis always advances along the line and never pivots in place mid-track. Tweak here without touching code.",
   "line_command_map": {
-    "0": [1200, 1200],
-    "1": [1500, 0],
-    "2": [1200, 1200],
-    "3": [1800, -800],
-    "4": [0, 1500],
-    "6": [-800, 1800]
+    "0": [1100, 1100],
+    "1": [1300, 600],
+    "2": [1100, 1100],
+    "3": [1500, 400],
+    "4": [600, 1300],
+    "6": [400, 1500]
   },
 
-  "_comment_line_steer_limit": "Max change in either wheel duty per tick. Smooths bang-bang transitions so a single noisy IR flip cannot slam the chassis perpendicular to the line.",
-  "line_max_wheel_delta": 1500,
+  "_comment_line_steer_limit": "Max change in either wheel duty per tick. Smooths bang-bang transitions so a single noisy IR flip cannot slam the chassis perpendicular to the line. Set above the line crawl speed so the first tick after a stop snaps to the centered (1100, 1100) command immediately.",
+  "line_max_wheel_delta": 1200,
   "line_perpendicular_recovery_s": 0.6,
 
   "avoid_backup_speed": -1200,

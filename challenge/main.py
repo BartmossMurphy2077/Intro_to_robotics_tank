@@ -98,6 +98,32 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="disable ANSI colour in the ASCII camera viewer",
     )
+    p.add_argument(
+        "--telemetry", default=None,
+        help=(
+            "path to write per-tick motor telemetry CSV "
+            "(default: outputs/telemetry/run_<unix_ts>.csv). "
+            "Use --no-telemetry to disable."
+        ),
+    )
+    p.add_argument(
+        "--no-telemetry", action="store_true",
+        help="disable per-tick motor telemetry CSV writing",
+    )
+    p.add_argument(
+        "--auto-start", action="store_true",
+        help=(
+            "skip the initial MANUAL idle and start in AUTO mode. Useful when "
+            "running headless over SSH where there is no terminal to press Q."
+        ),
+    )
+    p.add_argument(
+        "--max-seconds", type=float, default=None,
+        help=(
+            "exit the mission loop after this many seconds (in addition to "
+            "Ctrl-C / quit). Useful for bounded headless runs."
+        ),
+    )
     return p.parse_args()
 
 
@@ -239,7 +265,15 @@ def main() -> None:
         print(f"[challenge] {exc}", file=sys.stderr)
         raise SystemExit(2) from None
 
-    mission = ChallengeMission(car=car, config=cfg)
+    telemetry = None
+    if not args.no_telemetry:
+        from challenge.runtime.telemetry import MotorTelemetry, default_telemetry_path
+
+        telemetry_path = Path(args.telemetry) if args.telemetry else default_telemetry_path(repo_root)
+        telemetry = MotorTelemetry(telemetry_path)
+        print(f"[challenge] telemetry → {telemetry_path}")
+
+    mission = ChallengeMission(car=car, config=cfg, telemetry=telemetry)
     mission.reset_home_anchor()
 
     if args.calibrate:
@@ -252,6 +286,11 @@ def main() -> None:
                 set_arm_pose=bool(args.calibrate_arm),
             )
         finally:
+            if telemetry is not None:
+                try:
+                    telemetry.close()
+                except Exception:
+                    pass
             car.close()
         return
 
@@ -289,6 +328,8 @@ def main() -> None:
         sim_world=sim_world,
         visualizer=visualizer,
         status_interval_s=max(0.0, args.status_interval),
+        auto_start=bool(args.auto_start),
+        max_seconds=args.max_seconds,
     )
 
 
