@@ -629,7 +629,7 @@ class ChallengeMission:
 
         if self._ir_debug_log and smoothed != self._ir_debug_last_logged:
             self._ir_debug_last_logged = smoothed
-            line_seen = "yes" if smoothed in (1, 2, 3, 4, 6) else "NO"
+            line_seen = "NO" if self._line_follower.is_line_lost(smoothed) else "yes"
             self._ir_debug_emit(
                 f"[ir] raw={raw_code:03b} used={smoothed:03b} "
                 f"inv={'1' if self._ir_inverted_runtime else '0'} line={line_seen}"

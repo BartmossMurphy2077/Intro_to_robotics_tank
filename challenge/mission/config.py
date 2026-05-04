@@ -43,7 +43,11 @@ class MissionConfig:
     # On real hardware, code 0 usually means all sensors on bright floor
     # (line lost), not centered on line.
     line_code_zero_is_center: bool = False
-    line_crawl_speed: int = 220
+    # Freenove V2 LineSensor can report 111 on black tape depending on sensor
+    # threshold/polarity. Treat it as centered by default for the real chassis;
+    # operators can disable this if their board reports 111 off-line.
+    line_code_seven_is_center: bool = True
+    line_crawl_speed: int = 380
     line_command_map: Dict[int, Tuple[int, int]] = field(
         default_factory=lambda: dict(_DEFAULT_LINE_MAP)
     )
@@ -51,10 +55,15 @@ class MissionConfig:
     # chassis sideways in one tick, which is the main source of noisy wheel
     # chatter on the real robot.
     line_max_wheel_delta: int = 900
-    # When the spiral search budget expires we fall back to a slow rotate-in-
-    # place toward the last-seen line direction for at most this long, before
-    # giving up and crawling forward.
-    line_perpendicular_recovery_s: float = 0.6
+    # When there is no line at startup, move forward briefly to put the sensor
+    # bar over the tape before sweeping. Once we have seen the line, a later
+    # loss first backs out of the last command, then sweeps slowly.
+    line_startup_probe_s: float = 0.55
+    line_startup_probe_speed: int = 450
+    line_backtrack_s: float = 0.35
+    line_backtrack_speed: int = 420
+    line_search_turn_speed: int = 380
+    line_perpendicular_recovery_s: float = 0.5
 
     # Obstacle avoidance motion profile.
     avoid_backup_speed: int = -1200

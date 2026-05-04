@@ -31,6 +31,8 @@ def test_line_lost_uses_search_before_crawl_fallback():
         spiral_search_budget_s=2.0,
         line_crawl_speed=260,
         line_code_zero_is_center=False,
+        line_code_seven_is_center=False,
+        line_startup_probe_s=0.0,
     )
     runner = SimRunner("straight-line", seed=1, config=cfg)
     try:

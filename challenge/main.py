@@ -71,6 +71,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--loop-sleep", type=float, default=None)
     p.add_argument("--line-crawl-speed", type=int, default=None)
     p.add_argument("--ir-zero-lost", action="store_true")
+    p.add_argument("--ir-seven-lost", action="store_true",
+                   help="treat IR code 111 as line lost instead of centered")
     p.add_argument(
         "--invert-ir",
         action="store_true",
@@ -184,9 +186,12 @@ def apply_args(cfg: MissionConfig, args: argparse.Namespace) -> None:
         cfg.line_crawl_speed = max(120, args.line_crawl_speed)
     if args.ir_zero_lost:
         cfg.line_code_zero_is_center = False
-    # Keep camera scanning always enabled in mission runtime.
-    cfg.use_vision = True
-    cfg.vision_every_n_ticks = 1
+    if args.ir_seven_lost:
+        cfg.line_code_seven_is_center = False
+    if args.use_vision:
+        cfg.use_vision = True
+    if cfg.use_vision:
+        cfg.vision_every_n_ticks = 1
     if args.invert_ir:
         cfg.ir_invert_bits = True
         cfg.ir_auto_invert_bits = False

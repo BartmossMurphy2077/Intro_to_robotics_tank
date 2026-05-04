@@ -12,9 +12,9 @@ to the line. We therefore (a) ship a softer command map in `default.json`, and
 (b) clip the per-tick wheel-duty delta to `line_max_wheel_delta`, so even a
 noisy IR flip cannot slam the chassis sideways in one tick.
 
-If the line is lost (IR code 7, or 0 when configured as "lost"), we run a
-short spiral search; if that times out we rotate-in-place toward the last
-seen line direction before falling back to a slow forward crawl.
+If the line is lost, startup probes forward briefly to put the sensor bar over
+the tape. After the line was seen once, loss recovery first backs out of the
+last good command, then runs a bounded sweep and slow forward crawl.
 """
 
 from __future__ import annotations
@@ -28,8 +28,6 @@ if TYPE_CHECKING:
     from ..memory import LineGraph, MapPoint
 
 
-# IR codes that mean "line visible somewhere under the array".
-_LINE_VISIBLE_CODES = frozenset({1, 2, 3, 4, 6})
 # IR codes that mean "line is to the LEFT of center" — used to pick a recovery
 # rotation direction after the spiral search times out.
 _LINE_LEFT_CODES = frozenset({4, 6})
@@ -61,6 +59,10 @@ class LineFollower(Behavior):
         self._last_line_dir: int = 0
         # Re-acquire debounce: tick count of consecutive line-visible reads.
         self._reacquire_ticks: int = 0
+        self._line_seen_ever: bool = False
+        self._lost_entry_ts: float = 0.0
+        self._last_good_left: int = 0
+        self._last_good_right: int = 0
 
     @property
     def line_lost_ticks(self) -> int:
@@ -75,8 +77,11 @@ class LineFollower(Behavior):
         self._prev_left = 0
         self._prev_right = 0
         self._reacquire_ticks = 0
+        self._lost_entry_ts = 0.0
 
     def is_line_lost(self, infrared_code: int) -> bool:
+        if infrared_code == 7 and self.config.line_code_seven_is_center:
+            return False
         if infrared_code == 7:
             return True
         if infrared_code == 0 and not self.config.line_code_zero_is_center:
@@ -107,6 +112,7 @@ class LineFollower(Behavior):
 
         self._reacquire_ticks = 0
         self._line_lost_ticks = 0
+        self._line_seen_ever = True
         self._update_last_line_dir(ir)
 
         # Record line observation (cheap; debounced by the per-tick rate).
@@ -122,8 +128,11 @@ class LineFollower(Behavior):
             ctx.set_steer_target(target_l, target_r)
         ctx.drive(left, right)
         self._prev_left, self._prev_right = left, right
+        self._last_good_left, self._last_good_right = left, right
 
     def _duty_for_ir(self, infrared_code: int) -> tuple[int, int]:
+        if infrared_code == 7 and self.config.line_code_seven_is_center:
+            return self.config.line_command_map.get(7, self.config.line_command_map.get(2, (1000, 1000)))
         if infrared_code == 0 and not self.config.line_code_zero_is_center:
             return self.config.line_crawl_speed, self.config.line_crawl_speed
         return self.config.line_command_map.get(
@@ -153,9 +162,29 @@ class LineFollower(Behavior):
         now = ctx.now()
         if self._spiral_phase == 0:
             self._spiral_entry_ts = now
+            self._lost_entry_ts = now
             self._spiral_phase = 1
 
-        elapsed = now - self._spiral_entry_ts
+        lost_elapsed = now - self._lost_entry_ts
+        if not self._line_seen_ever and lost_elapsed < max(0.0, self.config.line_startup_probe_s):
+            self._drive_target(
+                ctx,
+                self.config.line_startup_probe_speed,
+                self.config.line_startup_probe_speed,
+            )
+            return
+
+        if (
+            self._line_seen_ever
+            and lost_elapsed < max(0.0, self.config.line_backtrack_s)
+            and (self._last_good_left != 0 or self._last_good_right != 0)
+        ):
+            left = -_clamp_abs(self._last_good_left, self.config.line_backtrack_speed)
+            right = -_clamp_abs(self._last_good_right, self.config.line_backtrack_speed)
+            self._drive_target(ctx, left, right)
+            return
+
+        elapsed = max(0.0, now - self._spiral_entry_ts - max(0.0, self.config.line_backtrack_s))
         budget = max(0.5, self.config.spiral_search_budget_s)
         recovery_budget = max(0.0, self.config.line_perpendicular_recovery_s)
         total_budget = budget + recovery_budget
@@ -166,11 +195,7 @@ class LineFollower(Behavior):
             # re-acquire still applies.
             self._last_line_recovery_ts = now
             duty = self.config.line_crawl_speed
-            left, right = self._apply_steer_limit(duty, duty)
-            if hasattr(ctx, "set_steer_target"):
-                ctx.set_steer_target(duty, duty)
-            ctx.drive(left, right)
-            self._prev_left, self._prev_right = left, right
+            self._drive_target(ctx, duty, duty)
             return
 
         if elapsed > budget:
@@ -178,31 +203,31 @@ class LineFollower(Behavior):
             # line direction. If we never saw a direction, default to a left
             # rotation (matches the spiral's first phase).
             self._spiral_phase = 2
-            duty = max(300, self.config.line_crawl_speed)
+            duty = max(250, self.config.line_search_turn_speed)
             direction = self._last_line_dir if self._last_line_dir != 0 else -1
             if direction < 0:
                 target_l, target_r = -duty, duty
             else:
                 target_l, target_r = duty, -duty
-            left, right = self._apply_steer_limit(target_l, target_r)
-            if hasattr(ctx, "set_steer_target"):
-                ctx.set_steer_target(target_l, target_r)
-            ctx.drive(left, right)
-            self._prev_left, self._prev_right = left, right
+            self._drive_target(ctx, target_l, target_r)
             return
 
         # Spiral phase: cycle through rotate-left, forward, rotate-right, forward.
         phase_s = max(0.35, budget / 4.0)
         phase = int(elapsed / phase_s) % 4
-        duty = max(300, self.config.line_crawl_speed)
+        turn = max(250, self.config.line_search_turn_speed)
+        crawl = max(250, self.config.line_crawl_speed)
         if phase == 0:
-            target_l, target_r = -duty, duty
+            target_l, target_r = -turn, turn
         elif phase == 1:
-            target_l, target_r = duty, duty
+            target_l, target_r = crawl, crawl
         elif phase == 2:
-            target_l, target_r = duty, -duty
+            target_l, target_r = turn, -turn
         else:
-            target_l, target_r = duty, duty
+            target_l, target_r = crawl, crawl
+        self._drive_target(ctx, target_l, target_r)
+
+    def _drive_target(self, ctx: MissionContext, target_l: int, target_r: int) -> None:
         left, right = self._apply_steer_limit(target_l, target_r)
         if hasattr(ctx, "set_steer_target"):
             ctx.set_steer_target(target_l, target_r)
@@ -218,6 +243,13 @@ def _clip_delta(prev: int, target: int, cap: int) -> int:
     if delta < -cap:
         return prev - cap
     return target
+
+
+def _clamp_abs(value: int, cap: int) -> int:
+    cap = max(0, int(cap))
+    if cap <= 0:
+        return int(value)
+    return max(-cap, min(cap, int(value)))
 
 
 __all__ = ["LineFollower"]

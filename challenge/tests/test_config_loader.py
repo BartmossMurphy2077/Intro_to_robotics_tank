@@ -31,8 +31,12 @@ def test_default_config_loads_and_applies() -> None:
         left, right = cfg.line_command_map[code]
         assert left >= 0 and right >= 0, f"code {code}: ({left}, {right}) has reverse component"
         assert left + right >= 1600, f"code {code}: not enough forward bias"
+    assert cfg.line_code_seven_is_center is True
+    assert cfg.line_command_map[7] == (1000, 1000)
     # New tunables are present.
     assert cfg.line_max_wheel_delta >= 900
+    assert cfg.line_startup_probe_speed >= cfg.line_crawl_speed
+    assert cfg.line_backtrack_s > 0
     assert cfg.carry_obstacle_grace_s == 1.5
     assert cfg.carry_min_obstacle_cm == 12.0
 
@@ -71,6 +75,50 @@ def test_line_follower_rate_limit_seeds_from_zero() -> None:
     assert right2 == 3000
 
 
+def test_line_follower_treats_seven_as_center_when_configured() -> None:
+    cfg = MissionConfig(line_code_seven_is_center=True)
+    follower = LineFollower(cfg, line_memory=[], line_graph=_DummyGraph())
+
+    assert follower.is_line_lost(7) is False
+    assert follower._duty_for_ir(7) == cfg.line_command_map[2]
+
+
+def test_line_follower_startup_probe_moves_forward_before_sweep() -> None:
+    cfg = MissionConfig(
+        line_code_seven_is_center=False,
+        line_startup_probe_s=1.0,
+        line_startup_probe_speed=450,
+    )
+    follower = LineFollower(cfg, line_memory=[], line_graph=_DummyGraph())
+    ctx = _DummyContext(ir=7, now=10.0)
+
+    follower.step(ctx)
+
+    assert ctx.drives[-1] == (450, 450)
+
+
+def test_line_follower_backtracks_after_losing_seen_line() -> None:
+    cfg = MissionConfig(
+        line_code_seven_is_center=False,
+        line_backtrack_s=1.0,
+        line_backtrack_speed=420,
+    )
+    follower = LineFollower(cfg, line_memory=[], line_graph=_DummyGraph())
+    ctx = _DummyContext(ir=2, now=1.0)
+    follower.step(ctx)
+
+    ctx.ir = 7
+    ctx.now_value = 1.2
+    follower.step(ctx)
+
+    # First loss tick brakes toward reverse without snapping polarity; the
+    # second tick reaches the bounded backtrack command.
+    assert ctx.drives[-1] == (0, 0)
+    ctx.now_value = 1.25
+    follower.step(ctx)
+    assert ctx.drives[-1] == (-420, -420)
+
+
 def test_pickup_grace_window_blocks_obstacle_check() -> None:
     cfg = MissionConfig(carry_obstacle_grace_s=1.0)
     pickup = BallPickup(cfg)
@@ -88,3 +136,26 @@ class _DummyGraph:
 
     def mark_home(self, *_args, **_kwargs) -> None:
         pass
+
+
+class _DummyContext:
+    def __init__(self, *, ir: int, now: float) -> None:
+        from challenge.mission.pose import Pose2D
+
+        self.ir = ir
+        self.now_value = now
+        self.pose = Pose2D()
+        self.drives: list[tuple[int, int]] = []
+        self.targets: list[tuple[int, int]] = []
+
+    def read_ir(self) -> int:
+        return self.ir
+
+    def now(self) -> float:
+        return self.now_value
+
+    def drive(self, left: int, right: int) -> None:
+        self.drives.append((left, right))
+
+    def set_steer_target(self, left: int, right: int) -> None:
+        self.targets.append((left, right))

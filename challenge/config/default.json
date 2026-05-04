@@ -8,20 +8,28 @@
   "home_radius_m": 0.22,
 
   "line_code_zero_is_center": false,
-  "line_crawl_speed": 220,
-  "_comment_line_command_map": "IR code -> [left_duty, right_duty]. Keep the normal map soft and forward-biased so the chassis does not pivot in place or chatter audibly when the IR code flips. Tweak here without touching code.",
+  "line_code_seven_is_center": true,
+  "line_crawl_speed": 380,
+  "_comment_line_command_map": "IR code -> [left_duty, right_duty]. Keep the normal map soft and forward-biased so the chassis does not pivot in place or chatter audibly when the IR code flips. Code 7 is centered for the Freenove V2 sensor behavior seen on the real robot.",
   "line_command_map": {
     "0": [1000, 1000],
     "1": [1150, 750],
     "2": [1000, 1000],
     "3": [1250, 650],
     "4": [750, 1150],
-    "6": [650, 1250]
+    "6": [650, 1250],
+    "7": [1000, 1000]
   },
 
   "_comment_line_steer_limit": "Max change in either wheel duty per tick. Smooths bang-bang transitions so a single noisy IR flip cannot slam the chassis sideways in one tick. Keep it below the vendor turn swings but above crawl speed so the robot still recovers promptly.",
   "line_max_wheel_delta": 900,
-  "line_perpendicular_recovery_s": 0.6,
+  "_comment_line_recovery": "If the line is not visible at startup, move forward briefly to put the IR bar over the tape. If the line is lost after it was seen, backtrack briefly before a bounded sweep.",
+  "line_startup_probe_s": 0.55,
+  "line_startup_probe_speed": 450,
+  "line_backtrack_s": 0.35,
+  "line_backtrack_speed": 420,
+  "line_search_turn_speed": 380,
+  "line_perpendicular_recovery_s": 0.5,
 
   "avoid_backup_speed": -1200,
   "avoid_backup_s": 0.30,
