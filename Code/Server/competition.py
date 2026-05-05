@@ -830,13 +830,10 @@ class CompetitionRobot:
         if ENABLE_INFRARED and self.infrared:
             left, right = self._step_line_follow()
             if left != right:
-                # Turn: brief full-power burst then resume forward.
-                # The loop's own cadence (~33 ms) is the gap between bursts.
+                # Set turn duty and let it run for the full loop tick (~10 ms).
+                # Next tick re-reads IR — if still off-line it turns again,
+                # if back on-line it stops turning automatically.
                 self._drive(left, right)
-                time.sleep(LINE_TURN_PULSE_S)
-                fwd_l = int(LINE_FORWARD[0] * LINE_FORWARD_STRENGTH)
-                fwd_r = int(LINE_FORWARD[1] * LINE_FORWARD_STRENGTH)
-                self._drive(fwd_l, fwd_r)
             else:
                 # Straight command — scale by LINE_FORWARD_STRENGTH
                 left  = int(left  * LINE_FORWARD_STRENGTH)
