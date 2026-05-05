@@ -166,9 +166,9 @@ CLAMP_OPEN   = 90
 
 # ── Line-follow motor commands (left_duty, right_duty) ───────────────────────
 LINE_FORWARD    = ( 1000,  1000)
-LINE_HARD_LEFT  = (20,  1000)
+LINE_HARD_LEFT  = (70,  1050)
 LINE_SOFT_LEFT  = ( 0,  1000)
-LINE_HARD_RIGHT = ( 1000, 20)
+LINE_HARD_RIGHT = ( 1050, 70)
 LINE_SOFT_RIGHT = ( 1000,  0)
 LINE_SEARCH     = ( 1000,  1000)   # lost line — creep forward searching
 
@@ -410,7 +410,8 @@ class CompetitionRobot:
         self._right_duty     = 0
         self._drive_log_tick = 0     # throttles motor-duty console logging
         self._ball_last_seen = 0.0   # timestamp of last positive ball detection
-        self._last_side = 0  # remembers last side that saw the line: -1=left, 0=centre, 1=right
+        self._last_side   = 0    # remembers last side that saw the line: -1=left, 0=centre, 1=right
+        self._line_lost_t = None  # timestamp when all sensors first went dark
 
         # Graceful shutdown on Ctrl-C or SIGTERM
         signal.signal(signal.SIGINT,  self._signal_handler)
@@ -615,6 +616,10 @@ class CompetitionRobot:
         centre_bit = (ir >> 1) & 1
         right_bit  =  ir       & 1
 
+        if centre_bit or left_bit or right_bit:
+            # At least one sensor sees the line — reset lost timer
+            self._line_lost_t = None
+
         if centre_bit:
             # Line is centred — drive straight
             self._last_side = 0
@@ -630,8 +635,8 @@ class CompetitionRobot:
             self._last_side = 1
             return LINE_SOFT_RIGHT
 
-        # All sensors off — line completely lost, reverse to find it again
-        return (-1500, -1500)
+        # All sensors off — creep forward until a sensor picks up the line
+        return (1000, 1000)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Obstacle avoidance  (blocking, always turns LEFT)
