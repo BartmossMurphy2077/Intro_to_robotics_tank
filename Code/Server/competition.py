@@ -410,8 +410,7 @@ class CompetitionRobot:
         self._right_duty     = 0
         self._drive_log_tick = 0     # throttles motor-duty console logging
         self._ball_last_seen = 0.0   # timestamp of last positive ball detection
-        self._last_ir_cmd    = LINE_FORWARD  # last non-zero IR command (used when line briefly lost)
-        self._straight_toggle = False  # alternates soft-left/right each tick when nominally straight
+        self._last_side = 0  # remembers last side that saw the line: -1=left, 0=centre, 1=right
 
         # Graceful shutdown on Ctrl-C or SIGTERM
         signal.signal(signal.SIGINT,  self._signal_handler)
@@ -596,49 +595,47 @@ class CompetitionRobot:
 
     def _step_line_follow(self) -> tuple:
         """
-        Read all three IR sensors and return (left_duty, right_duty).
+        Centre-first micro-correction line follower.
+
+        Every 10 ms tick:
+          1. If the CENTRE sensor sees the line → go straight.
+          2. If centre is off but LEFT sensor sees it → soft-left nudge
+             (line drifted left of robot, steer back left).
+          3. If centre is off but RIGHT sensor sees it → soft-right nudge.
+          4. All sensors off → use _last_side to keep correcting in the
+             same direction (handles corners and tape gaps).
 
         IR bit encoding (read_all_infrared returns a 3-bit int):
           bit 2 = IR01 (GPIO16) = LEFT  sensor  — 1 means line detected
           bit 1 = IR02 (GPIO26) = CENTRE sensor
           bit 0 = IR03 (GPIO21) = RIGHT  sensor
-
-        Decision table:
-          0 (000) none     → continue last known steering (handles corners and gaps)
-          1 (001) right    → hard right turn
-          2 (010) centre   → straight forward
-          3 (011) c+r      → gentle right
-          4 (100) left     → hard left turn
-          5 (101) l+r      → T-junction / branch → go straight
-          6 (110) l+c      → gentle left
-          7 (111) all      → wide junction / intersection → go straight
-                             NOTE: original car.py stops at 7; we continue
-                             through intersections as the competition course
-                             may have branches.
-
-        When IR=0 (line lost) the robot keeps the last known steering command
-        so that it continues rounding a corner rather than driving straight off
-        the track.
         """
-        ir = self.infrared.read_all_infrared()
+        ir         = self.infrared.read_all_infrared()
+        left_bit   = (ir >> 2) & 1
+        centre_bit = (ir >> 1) & 1
+        right_bit  =  ir       & 1
 
-        if ir == 0:
-            # Line temporarily lost (corner overshoot, gap in tape) —
-            # continue whatever we were doing so we don't undershoot a turn.
-            return self._last_ir_cmd
+        if centre_bit:
+            # Line is centred — drive straight
+            self._last_side = 0
+            return LINE_FORWARD
 
-        mapping = {
-            1: LINE_HARD_RIGHT,  # right only
-            2: LINE_FORWARD,     # centre only
-            3: LINE_SOFT_RIGHT,  # centre + right
-            4: LINE_HARD_LEFT,   # left only
-            5: LINE_FORWARD,     # left + right  (T-junction)
-            6: LINE_SOFT_LEFT,   # left + centre
-            7: LINE_FORWARD,     # all sensors   (wide junction)
-        }
-        cmd = mapping.get(ir, LINE_FORWARD)
-        self._last_ir_cmd = cmd   # remember for the IR=0 case above
-        return cmd
+        if left_bit:
+            # Line is to the left — micro-correct left
+            self._last_side = -1
+            return LINE_SOFT_LEFT
+
+        if right_bit:
+            # Line is to the right — micro-correct right
+            self._last_side = 1
+            return LINE_SOFT_RIGHT
+
+        # All sensors off — continue last known correction
+        if self._last_side == -1:
+            return LINE_SOFT_LEFT
+        if self._last_side == 1:
+            return LINE_SOFT_RIGHT
+        return LINE_FORWARD  # no history yet
 
     # ─────────────────────────────────────────────────────────────────────────
     # Obstacle avoidance  (blocking, always turns LEFT)
@@ -829,22 +826,10 @@ class CompetitionRobot:
 
         # ── Priority 3: IR line steer ─────────────────────────────────────────
         if ENABLE_INFRARED and self.infrared:
+            # _step_line_follow() returns the correct command for this 10 ms
+            # tick: straight, soft micro-correction, or last-known correction.
             left, right = self._step_line_follow()
-            if left != right:
-                # Set turn duty and let it run for the full loop tick (~10 ms).
-                # Next tick re-reads IR — if still off-line it turns again,
-                # if back on-line it stops turning automatically.
-                self._drive(left, right)
-            else:
-                # "Straight" reading — oscillate soft-left / soft-right each
-                # tick instead of driving dead-straight.  At 100 Hz this is
-                # a 10 ms left nudge followed by a 10 ms right nudge, keeping
-                # the robot locked on the line without drifting.
-                self._straight_toggle = not self._straight_toggle
-                if self._straight_toggle:
-                    self._drive(*LINE_SOFT_LEFT)
-                else:
-                    self._drive(*LINE_SOFT_RIGHT)
+            self._drive(left, right)
         else:
             # IR disabled — remain stationary
             self._stop()
