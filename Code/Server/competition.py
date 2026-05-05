@@ -1023,6 +1023,76 @@ class CompetitionRobot:
             self.shutdown()
 
     # ─────────────────────────────────────────────────────────────────────────
+    # Manual (WASD) control
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def manual_loop(self):
+        """
+        Drive the robot with WASD keys.  Works over SSH — uses raw terminal
+        mode so keystrokes are read instantly without pressing Enter.
+
+          W  — forward
+          S  — backward
+          A  — turn left  (left motor reverse, right motor forward)
+          D  — turn right (left motor forward,  right motor reverse)
+          Q  — quit / stop
+        """
+        import tty
+        import termios
+        import select
+
+        MANUAL_FORWARD = 1800
+        MANUAL_TURN    = 1500
+
+        print("=" * 56)
+        print("MANUAL MODE  —  WASD to drive,  Q to quit")
+        print("  W forward   S backward   A left   D right")
+        print("=" * 56)
+
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        current_key  = None
+
+        def _apply(key):
+            if key == 'w':
+                self._drive( MANUAL_FORWARD,  MANUAL_FORWARD)
+            elif key == 's':
+                self._drive(-MANUAL_FORWARD, -MANUAL_FORWARD)
+            elif key == 'a':
+                self._drive(-MANUAL_TURN,  MANUAL_TURN)
+            elif key == 'd':
+                self._drive( MANUAL_TURN, -MANUAL_TURN)
+            else:
+                self._stop()
+
+        try:
+            tty.setraw(fd)
+            while True:
+                readable, _, _ = select.select([sys.stdin], [], [], 0.05)
+                if readable:
+                    ch = sys.stdin.read(1).lower()
+                    if ch == 'q':
+                        self._stop()
+                        break
+                    if ch in ('w', 's', 'a', 'd'):
+                        if ch != current_key:
+                            current_key = ch
+                            _apply(current_key)
+                            label = {'w': 'FWD', 's': 'BWD', 'a': 'LEFT', 'd': 'RIGHT'}[ch]
+                            print(f"\r[Manual] {label}    ", end='', flush=True)
+                    else:
+                        if current_key is not None:
+                            current_key = None
+                            self._stop()
+                            print("\r[Manual] STOP    ", end='', flush=True)
+        except KeyboardInterrupt:
+            self._stop()
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            print("\n[Manual] Exiting manual mode")
+            self.shutdown()
+
+    # ─────────────────────────────────────────────────────────────────────────
     # Shutdown
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -1123,6 +1193,11 @@ CALIBRATION CONSTANTS  (edit at top of file)
         action="store_true",
         help="Print sensor readings only — robot does NOT drive",
     )
+    parser.add_argument(
+        "--manual",
+        action="store_true",
+        help="WASD manual control mode (W=fwd S=bwd A=left D=right Q=quit)",
+    )
 
     args = parser.parse_args()
 
@@ -1141,6 +1216,8 @@ CALIBRATION CONSTANTS  (edit at top of file)
 
     if args.calibrate:
         robot.calibrate_loop()
+    elif args.manual:
+        robot.manual_loop()
     else:
         robot.run()
 
