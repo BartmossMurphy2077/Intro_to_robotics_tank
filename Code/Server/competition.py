@@ -166,7 +166,7 @@ CLAMP_OPEN   = 90
 
 # ── Line-follow motor commands (left_duty, right_duty) ───────────────────────
 LINE_FORWARD    = ( 1000,  1000)
-LINE_HARD_LEFT  = (20,  1000)
+LINE_HARD_LEFT  = (70,  1050)
 LINE_SOFT_LEFT  = ( 0,  1000)
 LINE_HARD_RIGHT = ( 1000, 20)
 LINE_SOFT_RIGHT = ( 1000,  0)
