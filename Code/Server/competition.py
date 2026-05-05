@@ -148,6 +148,18 @@ BALL_APPROACH_KP   = 3.0    # proportional gain: steer = Kp × pixel_offset
 BALL_APPROACH_BASE = 1200   # base forward duty during ball approach
 MAX_STEER          = 800    # maximum steer correction (clamps Kp * offset)
 
+# ── Line-follow controller selector (overridden by CLI -b) ──────────────────
+#   "DISCRETE" → original 8-state IR lookup table (default, no flag)
+#   "PD"       → weighted-error PD on IR pattern (-b / --pd-line)
+LINE_CONTROLLER     = "DISCRETE"
+
+# Weighted-error PD line follower (only used when LINE_CONTROLLER == "PD")
+KP_LINE             = 250    # proportional gain on quantised IR error (±2)
+KD_LINE             = 150    # derivative gain (error - prev_error)
+LINE_BASE_DUTY      = 600    # forward duty when error is 0 (matches LINE_FORWARD)
+MAX_LINE_STEER      = 1000   # clamp on Kp*err + Kd*d_err (allows point-turns)
+LINE_TURN_SLOWDOWN  = 0.4    # 0 = no slowdown on hard turns, 1 = full stop at |err|=2
+
 # Vision / OpenCV
 MIN_BALL_AREA_PX = 800      # minimum contour area (px²) to count as ball
 BALL_HYSTERESIS  = 3        # consecutive frames with ball before "confirmed"
@@ -412,6 +424,8 @@ class CompetitionRobot:
         self._ball_last_seen = 0.0   # timestamp of last positive ball detection
         self._last_ir_cmd    = LINE_FORWARD  # last non-zero IR command (used when line briefly lost)
         self._straight_toggle = False  # alternates soft-left/right each tick when nominally straight
+        self._prev_line_error = 0            # PD: last quantised IR error (for D term)
+        self._last_pd_cmd     = LINE_FORWARD # PD: last (left, right) command (used when IR=0)
 
         # Graceful shutdown on Ctrl-C or SIGTERM
         signal.signal(signal.SIGINT,  self._signal_handler)
@@ -641,6 +655,53 @@ class CompetitionRobot:
         return cmd
 
     # ─────────────────────────────────────────────────────────────────────────
+    # IR line-following — weighted-error PD  (one tick, non-blocking)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _step_line_follow_pd(self) -> tuple:
+        """
+        PD controller over a quantised IR error signal.
+
+        Error encoding (positive = line is right of centre, robot turns right):
+          001 (R)    → +2     010 (C)    →  0     011 (CR)   → +1
+          100 (L)    → −2     101 (LR)   →  0     110 (LC)   → −1
+          111 (LCR)  →  0     000 (none) → freeze last command
+
+        u = KP_LINE*err + KD_LINE*(err - prev_err), clamped to ±MAX_LINE_STEER.
+        Forward base scales down with |err| via LINE_TURN_SLOWDOWN so the robot
+        eases on tight turns instead of overshooting.
+        """
+        ir = self.infrared.read_all_infrared()
+
+        if ir == 0:
+            # Same trick as discrete: keep the last raw motor command so we
+            # don't slam to zero between sensor flickers.
+            return self._last_pd_cmd
+
+        error_map = {
+            0b001: +2, 0b010:  0, 0b011: +1,
+            0b100: -2, 0b101:  0, 0b110: -1,
+            0b111:  0,
+        }
+        error = error_map.get(ir, 0)
+
+        derivative = error - self._prev_line_error
+        self._prev_line_error = error
+
+        u = KP_LINE * error + KD_LINE * derivative
+        if u >  MAX_LINE_STEER: u =  MAX_LINE_STEER
+        if u < -MAX_LINE_STEER: u = -MAX_LINE_STEER
+
+        base = LINE_BASE_DUTY * (1.0 - LINE_TURN_SLOWDOWN * (abs(error) / 2.0))
+
+        left  = int(base + u)
+        right = int(base - u)
+
+        cmd = (left, right)
+        self._last_pd_cmd = cmd
+        return cmd
+
+    # ─────────────────────────────────────────────────────────────────────────
     # Obstacle avoidance  (blocking, always turns LEFT)
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -829,22 +890,27 @@ class CompetitionRobot:
 
         # ── Priority 3: IR line steer ─────────────────────────────────────────
         if ENABLE_INFRARED and self.infrared:
-            left, right = self._step_line_follow()
-            if left != right:
-                # Set turn duty and let it run for the full loop tick (~10 ms).
-                # Next tick re-reads IR — if still off-line it turns again,
-                # if back on-line it stops turning automatically.
+            if LINE_CONTROLLER == "PD":
+                # Weighted-error PD — drive whatever the controller returns.
+                left, right = self._step_line_follow_pd()
                 self._drive(left, right)
             else:
-                # "Straight" reading — oscillate soft-left / soft-right each
-                # tick instead of driving dead-straight.  At 100 Hz this is
-                # a 10 ms left nudge followed by a 10 ms right nudge, keeping
-                # the robot locked on the line without drifting.
-                self._straight_toggle = not self._straight_toggle
-                if self._straight_toggle:
-                    self._drive(*LINE_SOFT_LEFT)
+                left, right = self._step_line_follow()
+                if left != right:
+                    # Set turn duty and let it run for the full loop tick (~10 ms).
+                    # Next tick re-reads IR — if still off-line it turns again,
+                    # if back on-line it stops turning automatically.
+                    self._drive(left, right)
                 else:
-                    self._drive(*LINE_SOFT_RIGHT)
+                    # "Straight" reading — oscillate soft-left / soft-right each
+                    # tick instead of driving dead-straight.  At 100 Hz this is
+                    # a 10 ms left nudge followed by a 10 ms right nudge, keeping
+                    # the robot locked on the line without drifting.
+                    self._straight_toggle = not self._straight_toggle
+                    if self._straight_toggle:
+                        self._drive(*LINE_SOFT_LEFT)
+                    else:
+                        self._drive(*LINE_SOFT_RIGHT)
         else:
             # IR disabled — remain stationary
             self._stop()
@@ -1228,7 +1294,7 @@ class CompetitionRobot:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def main():
-    global ENABLE_INFRARED, ENABLE_ULTRASONIC, ENABLE_VISION
+    global ENABLE_INFRARED, ENABLE_ULTRASONIC, ENABLE_VISION, LINE_CONTROLLER
 
     parser = argparse.ArgumentParser(
         prog="competition.py",
@@ -1294,6 +1360,12 @@ CALIBRATION CONSTANTS  (edit at top of file)
         help="WASD manual control mode (W=fwd S=bwd A=left D=right Q=quit)",
     )
 
+    parser.add_argument(
+        "-b", "--pd-line",
+        action="store_true",
+        help="Use NEW weighted-error PD line-follower (default: original discrete)",
+    )
+
     args = parser.parse_args()
 
     # Apply CLI overrides to module-level flags
@@ -1306,6 +1378,13 @@ CALIBRATION CONSTANTS  (edit at top of file)
     if args.no_vision:
         ENABLE_VISION = False
         print("[Config] Vision / ball        DISABLED")
+
+    if args.pd_line:
+        LINE_CONTROLLER = "PD"
+        print("[Config] Line controller      PD (weighted-error)")
+    else:
+        LINE_CONTROLLER = "DISCRETE"
+        print("[Config] Line controller      DISCRETE (original)")
 
     robot = CompetitionRobot()
 
