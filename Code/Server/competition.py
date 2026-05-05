@@ -411,6 +411,7 @@ class CompetitionRobot:
         self._drive_log_tick = 0     # throttles motor-duty console logging
         self._ball_last_seen = 0.0   # timestamp of last positive ball detection
         self._last_ir_cmd    = LINE_FORWARD  # last non-zero IR command (used when line briefly lost)
+        self._straight_toggle = False  # alternates soft-left/right each tick when nominally straight
 
         # Graceful shutdown on Ctrl-C or SIGTERM
         signal.signal(signal.SIGINT,  self._signal_handler)
@@ -818,12 +819,12 @@ class CompetitionRobot:
                 return
 
         # ── Priority 2: ultrasonic ───────────────────────────────────────────
+        # Reactive: steer hard left every tick while obstacle is present.
+        # No blocking manoeuvre — same per-tick pattern as IR line steering.
         if ENABLE_ULTRASONIC and self.sonic:
             dist = self.sonic.get_distance()
             if 0 < dist <= OBSTACLE_DIST_CM:
-                print(f"[LineFollow] Obstacle at {dist:.1f} cm")
-                self._stop()
-                self._transition(State.OBSTACLE_AVOID)
+                self._drive(*LINE_HARD_LEFT)
                 return
 
         # ── Priority 3: IR line steer ─────────────────────────────────────────
@@ -835,10 +836,15 @@ class CompetitionRobot:
                 # if back on-line it stops turning automatically.
                 self._drive(left, right)
             else:
-                # Straight command — scale by LINE_FORWARD_STRENGTH
-                left  = int(left  * LINE_FORWARD_STRENGTH)
-                right = int(right * LINE_FORWARD_STRENGTH)
-                self._drive(left, right)
+                # "Straight" reading — oscillate soft-left / soft-right each
+                # tick instead of driving dead-straight.  At 100 Hz this is
+                # a 10 ms left nudge followed by a 10 ms right nudge, keeping
+                # the robot locked on the line without drifting.
+                self._straight_toggle = not self._straight_toggle
+                if self._straight_toggle:
+                    self._drive(*LINE_SOFT_LEFT)
+                else:
+                    self._drive(*LINE_SOFT_RIGHT)
         else:
             # IR disabled — remain stationary
             self._stop()
