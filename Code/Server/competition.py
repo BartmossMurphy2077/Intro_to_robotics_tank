@@ -154,13 +154,22 @@ MAX_STEER          = 800    # maximum steer correction (clamps Kp * offset)
 LINE_CONTROLLER     = "DISCRETE"
 
 # Weighted-error PD line follower (only used when LINE_CONTROLLER == "PD")
-KP_LINE             = 500    # proportional gain on quantised IR error (±2)
-KD_LINE             = 250    # derivative gain (error - prev_error)
-LINE_BASE_DUTY      = 1000   # forward duty when error is 0 (matches LINE_FORWARD)
-MAX_LINE_STEER      = 1000   # clamp on Kp*err + Kd*d_err (allows point-turns)
-LINE_TURN_SLOWDOWN  = 0.0    # 0 = no slowdown; differential alone steers (avoids stall zone)
-LINE_STALL_FLOOR    = 1000   # |duty| below this stalls the motor — snap to 0 instead.
-                             # Matches the discrete controller's choice of 0 or ≥1000.
+# Two-mode steering, designed to skip the motor stall zone entirely:
+#   • SOFT (|error| < LINE_HARD_AT)   — inner wheel stays at LINE_BASE_DUTY
+#                                      (above stall threshold), outer wheel
+#                                      gets boosted by |u|.  Gentle turns,
+#                                      no jerkiness on straights.
+#   • HARD (|error| ≥ LINE_HARD_AT)   — inner wheel cuts cleanly to 0
+#                                      (free-wheeling, NOT stalling), outer
+#                                      wheel takes the full boost.  Point-
+#                                      turn for tight curves.
+# Both modes ensure every running wheel sits at ≥ LINE_BASE_DUTY (the small
+# "impulse floor"), never in the stall zone between 1 and ~999.
+KP_LINE             = 300    # proportional gain on quantised IR error (±2)
+KD_LINE             = 100    # derivative gain (error - prev_error)
+LINE_BASE_DUTY      = 1000   # impulse floor — running wheels never below this
+MAX_LINE_STEER      = 2000   # clamp on |u| (outer-wheel boost)
+LINE_HARD_AT        = 2      # |error| ≥ this triggers the hard / point-turn mode
 
 # Vision / OpenCV
 MIN_BALL_AREA_PX = 800      # minimum contour area (px²) to count as ball
@@ -672,7 +681,7 @@ class CompetitionRobot:
 
     def _step_line_follow_pd(self) -> tuple:
         """
-        PD controller over a quantised IR error signal.
+        Two-mode PD line-follower designed to skip the motor stall zone.
 
         Error encoding (positive = line is right of centre, robot turns right):
           001 (R)    → +2     010 (C)    →  0     011 (CR)   → +1
@@ -680,14 +689,22 @@ class CompetitionRobot:
           111 (LCR)  →  0     000 (none) → freeze last command
 
         u = KP_LINE*err + KD_LINE*(err - prev_err), clamped to ±MAX_LINE_STEER.
-        Forward base scales down with |err| via LINE_TURN_SLOWDOWN so the robot
-        eases on tight turns instead of overshooting.
+
+        Soft mode  (|err| < LINE_HARD_AT):
+            Inner wheel stays at LINE_BASE_DUTY (above stall threshold);
+            outer wheel = LINE_BASE_DUTY + |u|.  Gentle, smooth correction
+            on straights and shallow curves.
+        Hard mode  (|err| ≥ LINE_HARD_AT):
+            Inner wheel snaps to 0 (free-wheeling, NOT stalling);
+            outer wheel = LINE_BASE_DUTY + |u|.  Point-turn for tight curves.
+
+        Every running wheel is therefore ≥ LINE_BASE_DUTY (the impulse
+        floor) and the inner wheel is either at the floor or 0 — never in
+        the stall zone in between.
         """
         ir = self.infrared.read_all_infrared()
 
         if ir == 0:
-            # Same trick as discrete: keep the last raw motor command so we
-            # don't slam to zero between sensor flickers.
             return self._last_pd_cmd
 
         error_map = {
@@ -704,20 +721,17 @@ class CompetitionRobot:
         if u >  MAX_LINE_STEER: u =  MAX_LINE_STEER
         if u < -MAX_LINE_STEER: u = -MAX_LINE_STEER
 
-        base = LINE_BASE_DUTY * (1.0 - LINE_TURN_SLOWDOWN * (abs(error) / 2.0))
+        boost = LINE_BASE_DUTY + abs(u)
+        inner = 0 if abs(error) >= LINE_HARD_AT else LINE_BASE_DUTY
 
-        left  = int(base + u)
-        right = int(base - u)
+        if u >= 0:
+            # Turn right: outer = left wheel, inner = right wheel.
+            left, right = boost, inner
+        else:
+            # Turn left: outer = right wheel, inner = left wheel.
+            left, right = inner, boost
 
-        # Stall avoidance: hobby DC motors can't sustain |duty| below
-        # ~LINE_STALL_FLOOR under load.  Snap small magnitudes to 0 so the
-        # inner wheel brakes (point-turn style) instead of stalling.
-        if 0 < left  < LINE_STALL_FLOOR: left  = 0
-        if 0 < right < LINE_STALL_FLOOR: right = 0
-        if -LINE_STALL_FLOOR < left  < 0: left  = 0
-        if -LINE_STALL_FLOOR < right < 0: right = 0
-
-        cmd = (left, right)
+        cmd = (int(left), int(right))
         self._last_pd_cmd = cmd
         return cmd
 
