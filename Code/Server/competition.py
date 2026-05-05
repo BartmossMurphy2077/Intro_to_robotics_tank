@@ -169,8 +169,8 @@ LINE_FORWARD    = ( 900,  900)
 LINE_HARD_LEFT  = (20,  1000)
 LINE_SOFT_LEFT  = ( 0,  900)
 LINE_HARD_RIGHT = ( 1000, 20)
-LINE_SOFT_RIGHT = ( 700,  0)
-LINE_SEARCH     = ( 700,  700)   # lost line — creep forward searching
+LINE_SOFT_RIGHT = ( 900,  0)
+LINE_SEARCH     = ( 900,  900)   # lost line — creep forward searching
 
 
 # ══════════════════════════════════════════════════════════════════════════════
