@@ -118,7 +118,7 @@ TURN_STRENGTH      = 0.40  # 0.0–1.0 — motor duty scale for obstacle bypass
                            # Raise if robot under-shoots 90°; lower to reduce overshoot.
 
 # ── Line-follow params ───────────────────────────────────────────────────────
-LINE_FORWARD_STRENGTH = 0.80  # 0.0–1.0 — scales straight-ahead duty (1500 → ~1200)
+LINE_FORWARD_STRENGTH = 1.00  # 0.0–1.0 — scales straight-ahead duty (1500 → ~1200)
                               # Lower = slower forward speed on straight sections.
 LINE_TURN_PULSE_S  = 0.005   # seconds of FULL-POWER turn burst per IR tick.
 LINE_TURN_COAST_S  = 0.005   # forced forward coast after each turn burst.
