@@ -1103,13 +1103,13 @@ class CompetitionRobot:
                 elif ch == 'e':
                     print("\r[Manual] ARM DOWN          ", end='', flush=True)
                     for angle in range(ARM_UP, ARM_DOWN + 1, 1):
-                        self.servo.setServoAngle('0', angle)
+                        self.servo.setServoAngle('1', angle)
                         time.sleep(0.01)
 
                 elif ch == 'r':
                     print("\r[Manual] ARM UP            ", end='', flush=True)
                     for angle in range(ARM_DOWN, ARM_UP - 1, -1):
-                        self.servo.setServoAngle('0', angle)
+                        self.servo.setServoAngle('1', angle)
                         time.sleep(0.01)
 
                 elif ch == 'q':
@@ -1119,11 +1119,11 @@ class CompetitionRobot:
                     print(f"\r[Manual] CLAMP {label}        ", end='', flush=True)
                     if clamp_closed:
                         for angle in range(CLAMP_OPEN, CLAMP_CLOSED + 1, 2):
-                            self.servo.setServoAngle('1', angle)
+                            self.servo.setServoAngle('0', angle)
                             time.sleep(0.01)
                     else:
                         for angle in range(CLAMP_CLOSED, CLAMP_OPEN - 1, -2):
-                            self.servo.setServoAngle('1', angle)
+                            self.servo.setServoAngle('0', angle)
                             time.sleep(0.01)
 
                 # Any other key: ignore (let timeout handle drive stop)
