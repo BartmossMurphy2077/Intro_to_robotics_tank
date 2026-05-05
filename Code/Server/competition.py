@@ -120,7 +120,8 @@ TURN_STRENGTH      = 0.40  # 0.0–1.0 — motor duty scale for obstacle bypass
 # ── Line-follow params ───────────────────────────────────────────────────────
 LINE_FORWARD_STRENGTH = 0.80  # 0.0–1.0 — scales straight-ahead duty (1500 → ~1200)
                               # Lower = slower forward speed on straight sections.
-LINE_TURN_PULSE_S  = 0.010   # seconds of FULL-POWER turn burst per IR tick.
+LINE_TURN_PULSE_S  = 0.005   # seconds of FULL-POWER turn burst per IR tick.
+LINE_TURN_COAST_S  = 0.005   # forced forward coast after each turn burst.
                               # Each reading that says "turn" fires a 25 ms
                               # full-duty kick then stops — same snappy toggle
                               # behaviour as manual WASD.  Raise for stronger
@@ -829,13 +830,14 @@ class CompetitionRobot:
         if ENABLE_INFRARED and self.infrared:
             left, right = self._step_line_follow()
             if left != right:
-                # Turn: full-power burst for LINE_TURN_PULSE_S then resume
-                # forward so the robot keeps rolling between corrections.
+                # Turn: brief full-power burst, then forced forward coast so
+                # the same turn can't re-fire until the coast period expires.
                 self._drive(left, right)
                 time.sleep(LINE_TURN_PULSE_S)
                 fwd_l = int(LINE_FORWARD[0] * LINE_FORWARD_STRENGTH)
                 fwd_r = int(LINE_FORWARD[1] * LINE_FORWARD_STRENGTH)
                 self._drive(fwd_l, fwd_r)
+                time.sleep(LINE_TURN_COAST_S)
             else:
                 # Straight command — scale by LINE_FORWARD_STRENGTH
                 left  = int(left  * LINE_FORWARD_STRENGTH)
@@ -1081,18 +1083,18 @@ class CompetitionRobot:
                 self._drive( MANUAL_TURN, -MANUAL_TURN)
 
         def _step_servo(key):
-            """Advance servo one step in the held direction — no angle limits."""
+            """Advance servo one step in the held direction — clamped to safe range."""
             if key == 'e':
-                servo['arm'] -= SERVO_STEP
+                servo['arm'] = max(90, servo['arm'] - SERVO_STEP)
                 self.servo.setServoAngle('1', servo['arm'])
             elif key == 'r':
-                servo['arm'] += SERVO_STEP
+                servo['arm'] = min(180, servo['arm'] + SERVO_STEP)
                 self.servo.setServoAngle('1', servo['arm'])
             elif key == 'c':
-                servo['clamp'] -= SERVO_STEP
+                servo['clamp'] = max(90, servo['clamp'] - SERVO_STEP)
                 self.servo.setServoAngle('0', servo['clamp'])
             elif key == 'v':
-                servo['clamp'] += SERVO_STEP
+                servo['clamp'] = min(160, servo['clamp'] + SERVO_STEP)
                 self.servo.setServoAngle('0', servo['clamp'])
 
         try:
