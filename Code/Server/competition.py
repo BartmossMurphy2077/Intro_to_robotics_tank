@@ -165,12 +165,12 @@ CLAMP_CLOSED = 140
 CLAMP_OPEN   = 90
 
 # ── Line-follow motor commands (left_duty, right_duty) ───────────────────────
-LINE_FORWARD    = ( 1050,  1050)
-LINE_HARD_LEFT  = (70,  1050)
-LINE_SOFT_LEFT  = ( 70,  1050)
-LINE_HARD_RIGHT = ( 1050, 70)
-LINE_SOFT_RIGHT = ( 1050,  70)
-LINE_SEARCH     = ( 1050,  1050)   # lost line — creep forward searching
+LINE_FORWARD    = ( 1100,  1100)
+LINE_HARD_LEFT  = (70,  1100)
+LINE_SOFT_LEFT  = ( 70,  1100)
+LINE_HARD_RIGHT = ( 1100, 70)
+LINE_SOFT_RIGHT = ( 1100,  70)
+LINE_SEARCH     = ( 1100,  1100)   # lost line — creep forward searching
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -840,6 +840,9 @@ class CompetitionRobot:
             # _step_line_follow() returns the correct command for this 10 ms
             # tick: straight, soft micro-correction, or last-known correction.
             left, right = self._step_line_follow()
+            # Safety: never fully stop during line-follow — always creep forward
+            if left == 0 and right == 0:
+                left, right = 1100, 1100
             self._drive(left, right)
         else:
             # IR disabled — remain stationary
