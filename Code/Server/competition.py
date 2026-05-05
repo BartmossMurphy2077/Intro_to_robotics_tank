@@ -1031,11 +1031,11 @@ class CompetitionRobot:
         Drive the robot with WASD keys.  Works over SSH — uses raw terminal
         mode so keystrokes are read instantly without pressing Enter.
 
-          W  — forward
+          W  — forward          (hold to keep moving, release to stop)
           S  — backward
-          A  — turn left  (left motor reverse, right motor forward)
-          D  — turn right (left motor forward,  right motor reverse)
-          Q  — quit / stop
+          A  — turn left  (in-place)
+          D  — turn right (in-place)
+          Q or Ctrl-C  — quit cleanly
         """
         import tty
         import termios
@@ -1043,15 +1043,17 @@ class CompetitionRobot:
 
         MANUAL_FORWARD = 1800
         MANUAL_TURN    = 1500
+        KEY_TIMEOUT    = 0.15   # seconds without a keypress → key released → stop
 
         print("=" * 56)
-        print("MANUAL MODE  —  WASD to drive,  Q to quit")
+        print("MANUAL MODE  —  hold WASD to drive,  Q to quit")
         print("  W forward   S backward   A left   D right")
         print("=" * 56)
 
-        fd = sys.stdin.fileno()
+        fd           = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
-        current_key  = None
+        running_key  = None
+        last_key_t   = 0.0
 
         def _apply(key):
             if key == 'w':
@@ -1062,33 +1064,47 @@ class CompetitionRobot:
                 self._drive(-MANUAL_TURN,  MANUAL_TURN)
             elif key == 'd':
                 self._drive( MANUAL_TURN, -MANUAL_TURN)
-            else:
-                self._stop()
 
         try:
             tty.setraw(fd)
             while True:
-                readable, _, _ = select.select([sys.stdin], [], [], 0.05)
-                if readable:
-                    ch = sys.stdin.read(1).lower()
-                    if ch == 'q':
-                        self._stop()
-                        break
-                    if ch in ('w', 's', 'a', 'd'):
-                        if ch != current_key:
-                            current_key = ch
-                            _apply(current_key)
-                            label = {'w': 'FWD', 's': 'BWD', 'a': 'LEFT', 'd': 'RIGHT'}[ch]
-                            print(f"\r[Manual] {label}    ", end='', flush=True)
-                    else:
-                        if current_key is not None:
-                            current_key = None
-                            self._stop()
-                            print("\r[Manual] STOP    ", end='', flush=True)
-        except KeyboardInterrupt:
-            self._stop()
+                # ── Key-release detection via timeout ────────────────────────
+                if running_key is not None and (time.time() - last_key_t) > KEY_TIMEOUT:
+                    running_key = None
+                    self._stop()
+                    print("\r[Manual] STOP    ", end='', flush=True)
+
+                readable, _, _ = select.select([sys.stdin], [], [], 0.02)
+                if not readable:
+                    continue
+
+                ch = sys.stdin.read(1).lower()
+
+                # Quit on Q or Ctrl-C (raw mode sends \x03 for Ctrl-C)
+                if ch in ('q', '\x03'):
+                    break
+
+                if ch in ('w', 's', 'a', 'd'):
+                    last_key_t = time.time()
+                    if ch != running_key:
+                        running_key = ch
+                        _apply(ch)
+                        label = {'w': 'FWD', 's': 'BWD',
+                                 'a': 'LEFT', 'd': 'RIGHT'}[ch]
+                        print(f"\r[Manual] {label}    ", end='', flush=True)
+                # Any other key: ignore (don't stop — let the timeout handle it)
+
+        except Exception:
+            pass  # swallow all errors so finally always runs
         finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            try:
+                self._stop()
+            except Exception:
+                pass
+            try:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            except Exception:
+                pass
             print("\n[Manual] Exiting manual mode")
             self.shutdown()
 
