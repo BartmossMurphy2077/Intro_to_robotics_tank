@@ -118,11 +118,13 @@ TURN_STRENGTH      = 0.40  # 0.0–1.0 — motor duty scale for obstacle bypass
                            # Raise if robot under-shoots 90°; lower to reduce overshoot.
 
 # ── Line-follow params ───────────────────────────────────────────────────────
-LINE_FORWARD_STRENGTH = 0.80  # 0.0–1.0 — scales straight-ahead duty (1500 → ~1050)
+LINE_FORWARD_STRENGTH = 0.80  # 0.0–1.0 — scales straight-ahead duty (1500 → ~1200)
                               # Lower = slower forward speed on straight sections.
-LINE_TURN_STRENGTH    = 0.45  # 0.0–1.0 — scales turn duty during IR steering.
-                              # 0.60 keeps most values above MIN_TURN_DUTY so
-                              # both motors actually spin.
+LINE_TURN_PULSE_S  = 0.025   # seconds of FULL-POWER turn burst per IR tick.
+                              # Each reading that says "turn" fires a 25 ms
+                              # full-duty kick then stops — same snappy toggle
+                              # behaviour as manual WASD.  Raise for stronger
+                              # corrections; lower for gentler nudges.
 MIN_TURN_DUTY      = 400  # minimum |duty| for any scaled turn motor (≈24% PWM).
                            # Below this threshold hobby DC motors stall under load.
 FORWARD_MPS        = 0.30  # metres/second at motor duty 2000
@@ -827,17 +829,17 @@ class CompetitionRobot:
         if ENABLE_INFRARED and self.infrared:
             left, right = self._step_line_follow()
             if left != right:
-                # Turn command — scale by LINE_TURN_STRENGTH
-                left  = int(left  * LINE_TURN_STRENGTH)
-                right = int(right * LINE_TURN_STRENGTH)
-                # Clamp to MIN_TURN_DUTY so neither motor stalls
-                left  = left  if left  == 0 else (max(abs(left),  MIN_TURN_DUTY) * (1 if left  > 0 else -1))
-                right = right if right == 0 else (max(abs(right), MIN_TURN_DUTY) * (1 if right > 0 else -1))
+                # Turn: full-power burst for LINE_TURN_PULSE_S then stop.
+                # Re-evaluated every tick — creates snappy nudges rather than
+                # a sustained weak push, mimicking manual WASD toggle feel.
+                self._drive(left, right)
+                time.sleep(LINE_TURN_PULSE_S)
+                self._stop()
             else:
                 # Straight command — scale by LINE_FORWARD_STRENGTH
                 left  = int(left  * LINE_FORWARD_STRENGTH)
                 right = int(right * LINE_FORWARD_STRENGTH)
-            self._drive(left, right)
+                self._drive(left, right)
         else:
             # IR disabled — remain stationary
             self._stop()
@@ -1035,7 +1037,10 @@ class CompetitionRobot:
           S  — backward
           A  — turn left  (in-place)
           D  — turn right (in-place)
-          Q or Ctrl-C  — quit cleanly
+          E  — arm down
+          R  — arm up
+          Q  — toggle clamp (open ↔ closed)
+          X or Ctrl-C  — quit cleanly
         """
         import tty
         import termios
@@ -1045,15 +1050,17 @@ class CompetitionRobot:
         MANUAL_TURN    = 1500
         KEY_TIMEOUT    = 0.15   # seconds without a keypress → key released → stop
 
-        print("=" * 56)
-        print("MANUAL MODE  —  hold WASD to drive,  Q to quit")
-        print("  W forward   S backward   A left   D right")
-        print("=" * 56)
+        print("=" * 60)
+        print("MANUAL MODE  —  hold WASD to drive,  X to quit")
+        print("  W fwd   S bwd   A left   D right")
+        print("  E arm down   R arm up   Q toggle clamp")
+        print("=" * 60)
 
         fd           = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
         running_key  = None
         last_key_t   = 0.0
+        clamp_closed = True   # tracks current clamp state
 
         def _apply(key):
             if key == 'w':
@@ -1072,7 +1079,7 @@ class CompetitionRobot:
                 if running_key is not None and (time.time() - last_key_t) > KEY_TIMEOUT:
                     running_key = None
                     self._stop()
-                    print("\r[Manual] STOP    ", end='', flush=True)
+                    print("\r[Manual] STOP              ", end='', flush=True)
 
                 readable, _, _ = select.select([sys.stdin], [], [], 0.02)
                 if not readable:
@@ -1080,8 +1087,8 @@ class CompetitionRobot:
 
                 ch = sys.stdin.read(1).lower()
 
-                # Quit on Q or Ctrl-C (raw mode sends \x03 for Ctrl-C)
-                if ch in ('q', '\x03'):
+                # Quit on X or Ctrl-C
+                if ch in ('x', '\x03'):
                     break
 
                 if ch in ('w', 's', 'a', 'd'):
@@ -1091,8 +1098,25 @@ class CompetitionRobot:
                         _apply(ch)
                         label = {'w': 'FWD', 's': 'BWD',
                                  'a': 'LEFT', 'd': 'RIGHT'}[ch]
-                        print(f"\r[Manual] {label}    ", end='', flush=True)
-                # Any other key: ignore (don't stop — let the timeout handle it)
+                        print(f"\r[Manual] {label}              ", end='', flush=True)
+
+                elif ch == 'e':
+                    print("\r[Manual] ARM DOWN          ", end='', flush=True)
+                    self.servo.setServoAngle('0', ARM_DOWN)
+
+                elif ch == 'r':
+                    print("\r[Manual] ARM UP            ", end='', flush=True)
+                    self.servo.setServoAngle('0', ARM_UP)
+
+                elif ch == 'q':
+                    nonlocal_clamp = not clamp_closed
+                    clamp_closed = nonlocal_clamp
+                    angle = CLAMP_CLOSED if clamp_closed else CLAMP_OPEN
+                    label = "CLOSED" if clamp_closed else "OPEN"
+                    print(f"\r[Manual] CLAMP {label}        ", end='', flush=True)
+                    self.servo.setServoAngle('1', angle)
+
+                # Any other key: ignore (let timeout handle drive stop)
 
         except Exception:
             pass  # swallow all errors so finally always runs
