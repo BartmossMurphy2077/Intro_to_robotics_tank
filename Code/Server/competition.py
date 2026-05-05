@@ -166,9 +166,9 @@ CLAMP_OPEN   = 90
 
 # ── Line-follow motor commands (left_duty, right_duty) ───────────────────────
 LINE_FORWARD    = ( 1000,  1000)
-LINE_HARD_LEFT  = (70,  1050)
+LINE_HARD_LEFT  = (20,  1000)
 LINE_SOFT_LEFT  = ( 0,  1000)
-LINE_HARD_RIGHT = ( 1050, 70)
+LINE_HARD_RIGHT = ( 1000, 20)
 LINE_SOFT_RIGHT = ( 1000,  0)
 LINE_SEARCH     = ( 1000,  1000)   # lost line — creep forward searching
 
@@ -635,8 +635,18 @@ class CompetitionRobot:
             self._last_side = 1
             return LINE_SOFT_RIGHT
 
-        # All sensors off — creep forward until a sensor picks up the line
-        return (1000, 1000)
+        # All sensors off — line completely lost
+        now = time.time()
+        if self._line_lost_t is None:
+            self._line_lost_t = now
+        lost_for = now - self._line_lost_t
+
+        if lost_for < 0.4:
+            # First 400 ms: reverse to back onto the line
+            return (-1500, -1500)
+        else:
+            # After 400 ms still nothing: creep forward to search
+            return (1000, 1000)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Obstacle avoidance  (blocking, always turns LEFT)
