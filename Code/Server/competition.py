@@ -166,9 +166,9 @@ CLAMP_OPEN   = 90
 
 # ── Line-follow motor commands (left_duty, right_duty) ───────────────────────
 LINE_FORWARD    = ( 1500,  1500)
-LINE_HARD_LEFT  = (-4095,  4095)
+LINE_HARD_LEFT  = (0,  4095)
 LINE_SOFT_LEFT  = ( 1500,  3500)
-LINE_HARD_RIGHT = ( 4095, -4095)
+LINE_HARD_RIGHT = ( 4095, 0)
 LINE_SOFT_RIGHT = ( 3500,  1500)
 LINE_SEARCH     = ( 1200,  1200)   # lost line — creep forward searching
 
