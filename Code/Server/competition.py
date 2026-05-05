@@ -830,14 +830,13 @@ class CompetitionRobot:
         if ENABLE_INFRARED and self.infrared:
             left, right = self._step_line_follow()
             if left != right:
-                # Turn: brief full-power burst, then forced forward coast so
-                # the same turn can't re-fire until the coast period expires.
+                # Turn: brief full-power burst then resume forward.
+                # The loop's own cadence (~33 ms) is the gap between bursts.
                 self._drive(left, right)
                 time.sleep(LINE_TURN_PULSE_S)
                 fwd_l = int(LINE_FORWARD[0] * LINE_FORWARD_STRENGTH)
                 fwd_r = int(LINE_FORWARD[1] * LINE_FORWARD_STRENGTH)
                 self._drive(fwd_l, fwd_r)
-                time.sleep(LINE_TURN_COAST_S)
             else:
                 # Straight command — scale by LINE_FORWARD_STRENGTH
                 left  = int(left  * LINE_FORWARD_STRENGTH)
@@ -1044,6 +1043,8 @@ class CompetitionRobot:
           R  — arm down   (hold to move, release to stop)
           C  — clamp open (hold to move, release to stop)
           V  — clamp close(hold to move, release to stop)
+          M  — toggle autonomous FSM on/off
+          N  — toggle vision (red-ball detection) on/off
           X or Ctrl-C  — quit cleanly
         """
         import tty
@@ -1053,24 +1054,24 @@ class CompetitionRobot:
         MANUAL_FORWARD = 1800
         MANUAL_TURN    = 1500
         KEY_TIMEOUT    = 0.15   # seconds without a keypress → key released → stop
-        SERVO_STEP     = 3      # degrees per tick while servo key held
 
         DRIVE_KEYS = {'w', 's', 'a', 'd'}
-        SERVO_KEYS = {'e', 'r', 'c', 'v'}
 
         print("=" * 60)
         print("MANUAL MODE  —  hold keys to move,  X to quit")
         print("  W fwd   S bwd   A left   D right")
-        print("  E arm up   R arm down   C clamp open   V clamp close")
+        print("  E toggle arm up/down   C toggle clamp open/closed")
+        print("  M toggle autonomous    N toggle vision")
         print("=" * 60)
 
         fd           = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
         running_key  = None
         last_key_t   = 0.0
-
-        # Track current servo angles so hold increments continuously
-        servo = {'arm': ARM_UP, 'clamp': CLAMP_OPEN}
+        auto_mode    = False   # M toggles autonomous FSM
+        vision_on    = ENABLE_VISION and self.vision is not None
+        arm_down     = False   # False = up (90°), True = down (180°)
+        clamp_closed = False   # False = open (90°), True = closed (160°)
 
         def _apply_drive(key):
             if key == 'w':
@@ -1082,20 +1083,11 @@ class CompetitionRobot:
             elif key == 'd':
                 self._drive( MANUAL_TURN, -MANUAL_TURN)
 
-        def _step_servo(key):
-            """Advance servo one step in the held direction — clamped to safe range."""
-            if key == 'e':
-                servo['arm'] = max(90, servo['arm'] - SERVO_STEP)
-                self.servo.setServoAngle('1', servo['arm'])
-            elif key == 'r':
-                servo['arm'] = min(180, servo['arm'] + SERVO_STEP)
-                self.servo.setServoAngle('1', servo['arm'])
-            elif key == 'c':
-                servo['clamp'] = max(90, servo['clamp'] - SERVO_STEP)
-                self.servo.setServoAngle('0', servo['clamp'])
-            elif key == 'v':
-                servo['clamp'] = min(160, servo['clamp'] + SERVO_STEP)
-                self.servo.setServoAngle('0', servo['clamp'])
+        def _sweep_servo(channel, start, end, step):
+            """Sweep servo from start to end in increments of step."""
+            for angle in range(start, end + (1 if step > 0 else -1), step):
+                self.servo.setServoAngle(channel, angle)
+                time.sleep(0.01)
 
         try:
             tty.setraw(fd)
@@ -1103,18 +1095,19 @@ class CompetitionRobot:
                 # ── Key-release detection via timeout ────────────────────────
                 if running_key is not None and (time.time() - last_key_t) > KEY_TIMEOUT:
                     if running_key in DRIVE_KEYS:
-                        self._stop()
-                        print("\r[Manual] STOP              ", end='', flush=True)
+                        if not auto_mode:
+                            self._stop()
+                            print("\r[Manual] STOP              ", end='', flush=True)
                     running_key = None
 
-                # ── Continuously step servo each tick while key held ─────────
-                if running_key in SERVO_KEYS:
-                    _step_servo(running_key)
-                    label = {'e': f'ARM UP  ({servo["arm"]}°)',
-                             'r': f'ARM DN  ({servo["arm"]}°)',
-                             'c': f'CLAMP O ({servo["clamp"]}°)',
-                             'v': f'CLAMP C ({servo["clamp"]}°)'}[running_key]
-                    print(f"\r[Manual] {label}    ", end='', flush=True)
+                # ── Autonomous FSM tick (non-blocking states only) ───────────
+                if auto_mode:
+                    if self.state == State.LINE_FOLLOW:
+                        self._run_line_follow()
+                    elif self.state == State.BALL_APPROACH:
+                        self._run_ball_approach()
+                    # Blocking states (obstacle/pickup/return) are skipped in
+                    # hybrid mode to keep the keyboard responsive.
 
                 # ── Read next keypress (non-blocking, 20 ms window) ──────────
                 readable, _, _ = select.select([sys.stdin], [], [], 0.02)
@@ -1127,7 +1120,46 @@ class CompetitionRobot:
                 if ch in ('x', '\x03'):
                     break
 
-                if ch in DRIVE_KEYS:
+                elif ch == 'm':
+                    auto_mode = not auto_mode
+                    if auto_mode:
+                        self._transition(State.LINE_FOLLOW)
+                        print("\r[Manual] AUTO ON           ", end='', flush=True)
+                    else:
+                        self._stop()
+                        print("\r[Manual] AUTO OFF          ", end='', flush=True)
+
+                elif ch == 'n':
+                    vision_on = not vision_on
+                    if self.vision:
+                        if vision_on:
+                            self.vision.start()
+                            print("\r[Manual] VISION ON         ", end='', flush=True)
+                        else:
+                            self.vision.stop()
+                            print("\r[Manual] VISION OFF        ", end='', flush=True)
+                    else:
+                        print("\r[Manual] no camera         ", end='', flush=True)
+
+                elif ch == 'e':
+                    arm_down = not arm_down
+                    if arm_down:
+                        print("\r[Manual] ARM DOWN          ", end='', flush=True)
+                        _sweep_servo('1', 90, 180, 2)
+                    else:
+                        print("\r[Manual] ARM UP            ", end='', flush=True)
+                        _sweep_servo('1', 180, 90, -2)
+
+                elif ch == 'c':
+                    clamp_closed = not clamp_closed
+                    if clamp_closed:
+                        print("\r[Manual] CLAMP CLOSED      ", end='', flush=True)
+                        _sweep_servo('0', 90, 160, 2)
+                    else:
+                        print("\r[Manual] CLAMP OPEN        ", end='', flush=True)
+                        _sweep_servo('0', 160, 90, -2)
+
+                elif ch in DRIVE_KEYS and not auto_mode:
                     last_key_t = time.time()
                     if ch != running_key:
                         running_key = ch
@@ -1135,11 +1167,6 @@ class CompetitionRobot:
                         label = {'w': 'FWD', 's': 'BWD',
                                  'a': 'LEFT', 'd': 'RIGHT'}[ch]
                         print(f"\r[Manual] {label}              ", end='', flush=True)
-
-                elif ch in SERVO_KEYS:
-                    last_key_t = time.time()
-                    running_key = ch
-                    # stepping happens at the top of the next loop tick
 
                 # Any other key: ignore (let timeout handle drive stop)
 
