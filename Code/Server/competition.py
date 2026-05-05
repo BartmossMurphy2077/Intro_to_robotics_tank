@@ -168,7 +168,7 @@ CLAMP_OPEN   = 90
 LINE_FORWARD    = ( 1000,  1000)
 LINE_HARD_LEFT  = (70,  1050)
 LINE_SOFT_LEFT  = ( 0,  1000)
-LINE_HARD_RIGHT = ( 1000, 20)
+LINE_HARD_RIGHT = ( 1050, 70)
 LINE_SOFT_RIGHT = ( 1000,  0)
 LINE_SEARCH     = ( 1000,  1000)   # lost line — creep forward searching
 
