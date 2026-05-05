@@ -120,7 +120,7 @@ TURN_STRENGTH      = 0.40  # 0.0–1.0 — motor duty scale for obstacle bypass
 # ── Line-follow params ───────────────────────────────────────────────────────
 LINE_FORWARD_STRENGTH = 0.80  # 0.0–1.0 — scales straight-ahead duty (1500 → ~1200)
                               # Lower = slower forward speed on straight sections.
-LINE_TURN_PULSE_S  = 0.025   # seconds of FULL-POWER turn burst per IR tick.
+LINE_TURN_PULSE_S  = 0.010   # seconds of FULL-POWER turn burst per IR tick.
                               # Each reading that says "turn" fires a 25 ms
                               # full-duty kick then stops — same snappy toggle
                               # behaviour as manual WASD.  Raise for stronger
@@ -829,12 +829,13 @@ class CompetitionRobot:
         if ENABLE_INFRARED and self.infrared:
             left, right = self._step_line_follow()
             if left != right:
-                # Turn: full-power burst for LINE_TURN_PULSE_S then stop.
-                # Re-evaluated every tick — creates snappy nudges rather than
-                # a sustained weak push, mimicking manual WASD toggle feel.
+                # Turn: full-power burst for LINE_TURN_PULSE_S then resume
+                # forward so the robot keeps rolling between corrections.
                 self._drive(left, right)
                 time.sleep(LINE_TURN_PULSE_S)
-                self._stop()
+                fwd_l = int(LINE_FORWARD[0] * LINE_FORWARD_STRENGTH)
+                fwd_r = int(LINE_FORWARD[1] * LINE_FORWARD_STRENGTH)
+                self._drive(fwd_l, fwd_r)
             else:
                 # Straight command — scale by LINE_FORWARD_STRENGTH
                 left  = int(left  * LINE_FORWARD_STRENGTH)
@@ -1079,18 +1080,19 @@ class CompetitionRobot:
             elif key == 'd':
                 self._drive( MANUAL_TURN, -MANUAL_TURN)
 
-        def _apply_servo(key):
-            if key == 'e':   # arm up → angle decreases toward ARM_UP
-                servo['arm'] = max(ARM_UP, servo['arm'] - SERVO_STEP)
+        def _step_servo(key):
+            """Advance servo one step in the held direction — no angle limits."""
+            if key == 'e':
+                servo['arm'] -= SERVO_STEP
                 self.servo.setServoAngle('1', servo['arm'])
-            elif key == 'r': # arm down → angle increases toward ARM_DOWN
-                servo['arm'] = min(ARM_DOWN, servo['arm'] + SERVO_STEP)
+            elif key == 'r':
+                servo['arm'] += SERVO_STEP
                 self.servo.setServoAngle('1', servo['arm'])
-            elif key == 'c': # clamp open → angle decreases toward CLAMP_OPEN
-                servo['clamp'] = max(CLAMP_OPEN, servo['clamp'] - SERVO_STEP)
+            elif key == 'c':
+                servo['clamp'] -= SERVO_STEP
                 self.servo.setServoAngle('0', servo['clamp'])
-            elif key == 'v': # clamp close → angle increases toward CLAMP_CLOSED
-                servo['clamp'] = min(CLAMP_CLOSED, servo['clamp'] + SERVO_STEP)
+            elif key == 'v':
+                servo['clamp'] += SERVO_STEP
                 self.servo.setServoAngle('0', servo['clamp'])
 
         try:
@@ -1103,6 +1105,16 @@ class CompetitionRobot:
                         print("\r[Manual] STOP              ", end='', flush=True)
                     running_key = None
 
+                # ── Continuously step servo each tick while key held ─────────
+                if running_key in SERVO_KEYS:
+                    _step_servo(running_key)
+                    label = {'e': f'ARM UP  ({servo["arm"]}°)',
+                             'r': f'ARM DN  ({servo["arm"]}°)',
+                             'c': f'CLAMP O ({servo["clamp"]}°)',
+                             'v': f'CLAMP C ({servo["clamp"]}°)'}[running_key]
+                    print(f"\r[Manual] {label}    ", end='', flush=True)
+
+                # ── Read next keypress (non-blocking, 20 ms window) ──────────
                 readable, _, _ = select.select([sys.stdin], [], [], 0.02)
                 if not readable:
                     continue
@@ -1125,12 +1137,7 @@ class CompetitionRobot:
                 elif ch in SERVO_KEYS:
                     last_key_t = time.time()
                     running_key = ch
-                    _apply_servo(ch)
-                    label = {'e': f'ARM UP  ({servo["arm"]}°)',
-                             'r': f'ARM DN  ({servo["arm"]}°)',
-                             'c': f'CLAMP O ({servo["clamp"]}°)',
-                             'v': f'CLAMP C ({servo["clamp"]}°)'}[ch]
-                    print(f"\r[Manual] {label}    ", end='', flush=True)
+                    # stepping happens at the top of the next loop tick
 
                 # Any other key: ignore (let timeout handle drive stop)
 
