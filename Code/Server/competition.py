@@ -630,12 +630,8 @@ class CompetitionRobot:
             self._last_side = 1
             return LINE_SOFT_RIGHT
 
-        # All sensors off — continue last known correction
-        if self._last_side == -1:
-            return LINE_SOFT_LEFT
-        if self._last_side == 1:
-            return LINE_SOFT_RIGHT
-        return LINE_FORWARD  # no history yet
+        # All sensors off — line completely lost, reverse to find it again
+        return (-1500, -1500)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Obstacle avoidance  (blocking, always turns LEFT)
