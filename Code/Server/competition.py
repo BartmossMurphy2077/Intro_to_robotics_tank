@@ -1037,9 +1037,10 @@ class CompetitionRobot:
           S  — backward
           A  — turn left  (in-place)
           D  — turn right (in-place)
-          E  — arm down
-          R  — arm up
-          Q  — toggle clamp (open ↔ closed)
+          E  — arm up     (hold to move, release to stop)
+          R  — arm down   (hold to move, release to stop)
+          C  — clamp open (hold to move, release to stop)
+          V  — clamp close(hold to move, release to stop)
           X or Ctrl-C  — quit cleanly
         """
         import tty
@@ -1049,20 +1050,26 @@ class CompetitionRobot:
         MANUAL_FORWARD = 1800
         MANUAL_TURN    = 1500
         KEY_TIMEOUT    = 0.15   # seconds without a keypress → key released → stop
+        SERVO_STEP     = 3      # degrees per tick while servo key held
+
+        DRIVE_KEYS = {'w', 's', 'a', 'd'}
+        SERVO_KEYS = {'e', 'r', 'c', 'v'}
 
         print("=" * 60)
-        print("MANUAL MODE  —  hold WASD to drive,  X to quit")
+        print("MANUAL MODE  —  hold keys to move,  X to quit")
         print("  W fwd   S bwd   A left   D right")
-        print("  E arm down   R arm up   Q toggle clamp")
+        print("  E arm up   R arm down   C clamp open   V clamp close")
         print("=" * 60)
 
         fd           = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
         running_key  = None
         last_key_t   = 0.0
-        clamp_closed = True   # tracks current clamp state
 
-        def _apply(key):
+        # Track current servo angles so hold increments continuously
+        servo = {'arm': ARM_UP, 'clamp': CLAMP_OPEN}
+
+        def _apply_drive(key):
             if key == 'w':
                 self._drive( MANUAL_FORWARD,  MANUAL_FORWARD)
             elif key == 's':
@@ -1072,14 +1079,29 @@ class CompetitionRobot:
             elif key == 'd':
                 self._drive( MANUAL_TURN, -MANUAL_TURN)
 
+        def _apply_servo(key):
+            if key == 'e':   # arm up → angle decreases toward ARM_UP
+                servo['arm'] = max(ARM_UP, servo['arm'] - SERVO_STEP)
+                self.servo.setServoAngle('1', servo['arm'])
+            elif key == 'r': # arm down → angle increases toward ARM_DOWN
+                servo['arm'] = min(ARM_DOWN, servo['arm'] + SERVO_STEP)
+                self.servo.setServoAngle('1', servo['arm'])
+            elif key == 'c': # clamp open → angle decreases toward CLAMP_OPEN
+                servo['clamp'] = max(CLAMP_OPEN, servo['clamp'] - SERVO_STEP)
+                self.servo.setServoAngle('0', servo['clamp'])
+            elif key == 'v': # clamp close → angle increases toward CLAMP_CLOSED
+                servo['clamp'] = min(CLAMP_CLOSED, servo['clamp'] + SERVO_STEP)
+                self.servo.setServoAngle('0', servo['clamp'])
+
         try:
             tty.setraw(fd)
             while True:
                 # ── Key-release detection via timeout ────────────────────────
                 if running_key is not None and (time.time() - last_key_t) > KEY_TIMEOUT:
+                    if running_key in DRIVE_KEYS:
+                        self._stop()
+                        print("\r[Manual] STOP              ", end='', flush=True)
                     running_key = None
-                    self._stop()
-                    print("\r[Manual] STOP              ", end='', flush=True)
 
                 readable, _, _ = select.select([sys.stdin], [], [], 0.02)
                 if not readable:
@@ -1091,40 +1113,24 @@ class CompetitionRobot:
                 if ch in ('x', '\x03'):
                     break
 
-                if ch in ('w', 's', 'a', 'd'):
+                if ch in DRIVE_KEYS:
                     last_key_t = time.time()
                     if ch != running_key:
                         running_key = ch
-                        _apply(ch)
+                        _apply_drive(ch)
                         label = {'w': 'FWD', 's': 'BWD',
                                  'a': 'LEFT', 'd': 'RIGHT'}[ch]
                         print(f"\r[Manual] {label}              ", end='', flush=True)
 
-                elif ch == 'e':
-                    print("\r[Manual] ARM DOWN          ", end='', flush=True)
-                    for angle in range(ARM_UP, ARM_DOWN + 1, 1):
-                        self.servo.setServoAngle('1', angle)
-                        time.sleep(0.01)
-
-                elif ch == 'r':
-                    print("\r[Manual] ARM UP            ", end='', flush=True)
-                    for angle in range(ARM_DOWN, ARM_UP - 1, -1):
-                        self.servo.setServoAngle('1', angle)
-                        time.sleep(0.01)
-
-                elif ch == 'q':
-                    nonlocal_clamp = not clamp_closed
-                    clamp_closed = nonlocal_clamp
-                    label = "CLOSED" if clamp_closed else "OPEN"
-                    print(f"\r[Manual] CLAMP {label}        ", end='', flush=True)
-                    if clamp_closed:
-                        for angle in range(CLAMP_OPEN, CLAMP_CLOSED + 1, 2):
-                            self.servo.setServoAngle('0', angle)
-                            time.sleep(0.01)
-                    else:
-                        for angle in range(CLAMP_CLOSED, CLAMP_OPEN - 1, -2):
-                            self.servo.setServoAngle('0', angle)
-                            time.sleep(0.01)
+                elif ch in SERVO_KEYS:
+                    last_key_t = time.time()
+                    running_key = ch
+                    _apply_servo(ch)
+                    label = {'e': f'ARM UP  ({servo["arm"]}°)',
+                             'r': f'ARM DN  ({servo["arm"]}°)',
+                             'c': f'CLAMP O ({servo["clamp"]}°)',
+                             'v': f'CLAMP C ({servo["clamp"]}°)'}[ch]
+                    print(f"\r[Manual] {label}    ", end='', flush=True)
 
                 # Any other key: ignore (let timeout handle drive stop)
 
